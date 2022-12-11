@@ -76,12 +76,33 @@ def create_card():
     return vuetify.VCard(tile=True, fluid=True,
         classes="fill-height grow d-flex flex-column flex-nowrap")
 
+def get_interaction_callback(axis:int):
+    def callback(*args, **kwargs):
+        sview = GLOBALS.SliceViews[axis]
+        sfp = sview.CameraFocalPoint
+
+        for i in range(3):
+            if i == axis: continue
+            tview = GLOBALS.SliceViews[i]
+            tview.CameraParallelScale = sview.CameraParallelScale
+
+            pos = [0, 0, 0]
+            for cc in range(3):
+                pos[cc] = sfp[cc] + tview.CameraPosition[cc] - tview.CameraFocalPoint[cc]
+
+            tview.CameraFocalPoint = sfp
+            tview.CameraPosition = pos
+            GLOBALS.HTMLSliceViews[i].update()
+
+    return callback
+
 def create_slice_view(axis:int):
     card = create_card()
     with card:
         with vuetify.VRow(classes="grow"):
             with vuetify.VContainer(classes="fill-height"):
                 view = simple_view.create_view()
+                view.GetInteractor().AddObserver('InteractionEvent', get_interaction_callback(axis))
                 htmlView = paraview.VtkRemoteView(view, ref=f'view_slice_{axis}', interactive_ratio=1.0)
                 GLOBALS.SliceViews[axis] = view
                 GLOBALS.HTMLSliceViews[axis] = htmlView
