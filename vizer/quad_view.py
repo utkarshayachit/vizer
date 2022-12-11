@@ -135,15 +135,15 @@ def setup_3dview(state):
     simple.SetActiveView(GLOBALS.VolumeView)
     ext = GLOBALS.Reader.GetDataInformation().GetExtent()
 
-    sampleIJK = [1, 1, 1]
-    # we use prime-factors to ensure we always include the boundaries
-    for dim in range(3):
-        sampleIJK[dim] = primefactors(ext[2*dim + 1] - ext[2*dim], limit=200)[0]
-
-    subset = simple.ExtractSubset(Input=GLOBALS.Reader)
-    subset.SampleRateI = sampleIJK[0]
-    subset.SampleRateJ = sampleIJK[1]
-    subset.SampleRateK = sampleIJK[2]
+    # sampleIJK = [1, 1, 1]
+    # # we use prime-factors to ensure we always include the boundaries
+    # for dim in range(3):
+    #     sampleIJK[dim] = primefactors(ext[2*dim + 1] - ext[2*dim], limit=200)[0]
+    # subset = simple.ExtractSubset(Input=GLOBALS.Reader)
+    # subset.SampleRateI = sampleIJK[0]
+    # subset.SampleRateJ = sampleIJK[1]
+    # subset.SampleRateK = sampleIJK[2]
+    subset = GLOBALS.Reader
     display = simple.Show(subset, GLOBALS.VolumeView)
     display.SetRepresentationType('Outline')
     # display.Opacity = 0.3
