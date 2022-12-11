@@ -5,6 +5,7 @@ description = "Data Visualization Application"
 requires-python = ">=3.7"
 dependencies = [
     "trame>=2.2",
+    "sympy>=1.11",
 ]
 
 [project.optional-dependencies]
