@@ -5,8 +5,11 @@ from paraview import simple
 from trame.widgets import vuetify, paraview
 from sympy.ntheory import primefactors
 
+import re
+
 # setup logging
 from . import utils, loader, simple_view
+
 
 log = utils.get_logger(__name__)
 
@@ -20,7 +23,7 @@ class GLOBALS:
     ExtractSubsets = [None, None, None]
     SliceOutlines = [None, None, None]
 
-    Callbacks = [[], [], []]
+    CategoricalColors = {}
 
     @classmethod
     def get_views(cls):
@@ -29,6 +32,12 @@ class GLOBALS:
     @classmethod
     def get_html_views(cls):
         return cls.HTMLSliceViews + [cls.HTMLVolumeView]
+
+    @classmethod
+    def add_segorder(cls, txt:str):
+        regex = r"(?:\s*(?P<value>\d+)-(?P<text>[^,]+),?)"
+        matches = re.finditer(regex, txt)
+        cls.CategoricalColors = dict([(int(m.group('value')), m.group('text')) for m in matches])
 
 
 class CONSTANTS:
@@ -61,11 +70,36 @@ def get_widget():
  
 def load_dataset(filename):
     GLOBALS.Reader = loader.load_dataset(filename)
+    load_metadata(filename)
+
+def load_metadata(filename:str):
+    # replace filaname extension with .txt
+    import os.path
+    metaFilename = os.path.splitext(filename)[0] + ".txt"
+    if os.path.isfile(metaFilename):
+        with open(metaFilename, 'r') as f:
+            for line in f.readlines():
+                if line.strip().upper().startswith('SEGORDER:'):
+                    GLOBALS.add_segorder(line[len('SEGORDER'):])
+                    return
 
 def setup_visualizations(state):
     GLOBALS.Reader.UpdatePipeline()
     GLOBALS.LUT = simple.GetColorTransferFunction('ImageFile')
-    GLOBALS.LUT.ApplyPreset('Blue Orange (divergent)', True)
+    if GLOBALS.CategoricalColors:
+        lut = GLOBALS.LUT
+        lut.InterpretValuesAsCategories = 1
+        lut.AnnotationsInitialized = 1
+        annotations = []
+        for x,y in GLOBALS.CategoricalColors.items():
+            annotations += [str(x), y]
+        lut.Annotations = annotations
+        l = len(GLOBALS.CategoricalColors)
+        l = 3 if l < 3 else l
+        l = 11 if l > 11 else l
+        lut.ApplyPreset(f'Brewer Diverging Spectral ({l})', True)
+    else:
+        GLOBALS.LUT.ApplyPreset('Blue Orange (divergent)', True)
     # setup_volume()
     for axis in range(3):
         setup_slice(axis, state)
@@ -148,6 +182,10 @@ def setup_3dview(state):
     display.SetRepresentationType('Outline')
     # display.Opacity = 0.3
     simple.ColorBy(display, ('POINTS', 'ImageFile'))
+    display.SetScalarBarVisibility(GLOBALS.VolumeView, True)
+    # don't show any SB title
+    sb = simple.GetScalarBar(GLOBALS.LUT, GLOBALS.VolumeView)
+    sb.Title = ""
 
     for axis in range(3):
         slice = simple.ExtractSubset(Input=GLOBALS.Reader, VOI=ext)

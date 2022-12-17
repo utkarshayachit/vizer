@@ -46,7 +46,7 @@ def load_dataset(filename):
         log.error(f'only .raw files are supported (got {ext})')
         return False
 
-    config = config = extract_config(filename)
+    config = extract_config(filename)
     if not config:
         log.error('could not determine metadata')
         return False
