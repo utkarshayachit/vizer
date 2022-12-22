@@ -8,7 +8,7 @@ from sympy.ntheory import primefactors
 import re
 
 # setup logging
-from . import utils, loader, simple_view
+from . import utils, loader, simple_view, reader
 
 
 log = utils.get_logger(__name__)
@@ -22,6 +22,7 @@ class GLOBALS:
     HTMLVolumeView = None
     ExtractSubsets = [None, None, None]
     SliceOutlines = [None, None, None]
+    SubsamplingRate = 1
 
     CategoricalColors = {}
 
@@ -68,9 +69,16 @@ def get_widget():
                 create_volume_view()
     return card
  
-def load_dataset(filename):
-    GLOBALS.Reader = loader.load_dataset(filename)
+def load_dataset(filename, args):
+    if args.use_vtk_reader:
+        log.info('using VTK reader')
+        GLOBALS.Reader = loader.load_dataset(filename)
+    else:
+        log.info('using custom reader')
+        GLOBALS.Reader = reader.load_dataset_paraview(filename, args.subsampling_factor)
+        GLOBALS.SubsamplingRate = args.subsampling_factor
     load_metadata(filename)
+    GLOBALS.Reader.UpdatePipeline()
 
 def load_metadata(filename:str):
     # replace filaname extension with .txt
@@ -84,7 +92,6 @@ def load_metadata(filename:str):
                     return
 
 def setup_visualizations(state):
-    GLOBALS.Reader.UpdatePipeline()
     GLOBALS.LUT = simple.GetColorTransferFunction('ImageFile')
     if GLOBALS.CategoricalColors:
         lut = GLOBALS.LUT
@@ -247,7 +254,7 @@ def setup_slice(axis:int, state):
     # add text annotation
     name = ['X', 'Y', 'Z']
     text = simple.Text()
-    text.Text = f'{name[axis]} Slice: {display.Slice}'
+    text.Text = f'{name[axis]} Slice: {display.Slice * GLOBALS.SubsamplingRate}'
     textDisplay = simple.Show(text, view)
     textDisplay.Color = CONSTANTS.Colors[axis]
 
@@ -258,6 +265,6 @@ def setup_slice(axis:int, state):
         offset = kwargs.get(f'slice{axis}')
         GLOBALS.ExtractSubsets[axis].VOI[2*axis] = \
             GLOBALS.ExtractSubsets[axis].VOI[2*axis+1] = offset
-        text.Text = f'{name[axis]} Slice: {offset}'
+        text.Text = f'{name[axis]} Slice: {offset * GLOBALS.SubsamplingRate}'
         for v in GLOBALS.get_html_views():
             v.update()

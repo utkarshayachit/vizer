@@ -14,6 +14,10 @@ def exec():
     server.cli.add_argument('--dataset',help='dataset to load (REQUIRED)', required=True)
     server.cli.add_argument('--create-on-server-ready',
             help='file to create when server is ready')
+    server.cli.add_argument('--use-vtk-reader',
+            help='use standard VTK reader', default=False, action='store_true')
+    server.cli.add_argument('--subsampling-factor',
+            help='specify image sub-sampling factor', default=4, type=int)
 
     # parse args
     args = server.cli.parse_known_args()[0]
@@ -29,7 +33,7 @@ def exec():
         return
 
     log.info('loading dataset "%s"', dataset)
-    viewer.load_dataset(dataset)
+    viewer.load_dataset(dataset, args)
 
     def startup(*_, **__):
         """callback which loads dataset when the server starts up"""

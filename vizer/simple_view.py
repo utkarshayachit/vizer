@@ -27,8 +27,9 @@ def get_widget():
         GLOBALS.HTMLView = htmlView
     return card
  
-def load_dataset(filename):
+def load_dataset(filename, args):
     GLOBALS.Reader = simple.OpenDataFile(filename)
+    GLOBALS.Reader.UpdatePipeline()
 
 def setup_visualizations(state):
     assert GLOBALS.View and GLOBALS.HTMLView and GLOBALS.Reader
