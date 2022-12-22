@@ -8,7 +8,7 @@ from sympy.ntheory import primefactors
 import re
 
 # setup logging
-from . import utils, loader, simple_view
+from . import utils, loader, simple_view, reader
 
 
 log = utils.get_logger(__name__)
@@ -68,9 +68,15 @@ def get_widget():
                 create_volume_view()
     return card
  
-def load_dataset(filename):
-    GLOBALS.Reader = loader.load_dataset(filename)
+def load_dataset(filename, args):
+    if args.use_vtk_reader:
+        log.info('using VTK reader')
+        GLOBALS.Reader = loader.load_dataset(filename)
+    else:
+        log.info('using custom reader')
+        GLOBALS.Reader = reader.load_dataset_paraview(filename)
     load_metadata(filename)
+    GLOBALS.Reader.UpdatePipeline()
 
 def load_metadata(filename:str):
     # replace filaname extension with .txt
@@ -84,7 +90,6 @@ def load_metadata(filename:str):
                     return
 
 def setup_visualizations(state):
-    GLOBALS.Reader.UpdatePipeline()
     GLOBALS.LUT = simple.GetColorTransferFunction('ImageFile')
     if GLOBALS.CategoricalColors:
         lut = GLOBALS.LUT
