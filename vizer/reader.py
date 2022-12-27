@@ -136,7 +136,8 @@ def load_dataset_paraview(filename: str, subsamplingFactor: int):
     proxy = pvs.PVTrivialProducer()
 
     if subsamplingFactor > 1:
-        from vtkmodules.vtkImagingCore import vtkExtractVOI
+        # from vtkmodules.vtkImagingCore import vtkExtractVOI
+        from vtkmodules.vtkAcceleratorsVTKmFilters import vtkmExtractVOI as vtkExtractVOI
         voi = vtkExtractVOI()
         voi.SetVOI(*reader._get_config().get_extents())
         voi.SetSampleRate(subsamplingFactor, subsamplingFactor, subsamplingFactor)
