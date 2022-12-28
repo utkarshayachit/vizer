@@ -5,6 +5,8 @@ from paraview import simple
 from trame.widgets import vuetify, paraview
 from sympy.ntheory import primefactors
 
+import asyncio
+import os
 import re
 
 # setup logging
@@ -14,7 +16,7 @@ from . import utils, loader, simple_view, reader
 log = utils.get_logger(__name__)
 
 class GLOBALS:
-    Reader = None
+    DataProducer = None
     LUT = None
     SliceViews = [None, None, None]
     VolumeView = None
@@ -33,6 +35,13 @@ class GLOBALS:
     @classmethod
     def get_html_views(cls):
         return cls.HTMLSliceViews + [cls.HTMLVolumeView]
+
+    @classmethod
+    def update_html_views(cls):
+        "update all HTML views"
+        for view in cls.get_html_views():
+            view.update()
+
 
     @classmethod
     def add_segorder(cls, txt:str):
@@ -69,16 +78,52 @@ def get_widget():
                 create_volume_view()
     return card
  
-def load_dataset(filename, args):
+def prepare(args):
+    "load metadata etc. for the dataset"
     if args.use_vtk_reader:
         log.info('using VTK reader')
-        GLOBALS.Reader = loader.load_dataset(filename)
+        GLOBALS.DataProducer = loader.load_dataset(args.dataset)
     else:
         log.info('using custom reader')
-        GLOBALS.Reader = reader.load_dataset_paraview(filename, args.subsampling_factor)
+        data = subsample(reader.load_dummy_dataset(args.dataset), args.subsampling_factor)
+        proxy = create_proxy(data)
+        GLOBALS.DataProducer = simple.PassThrough(Input=proxy)
         GLOBALS.SubsamplingRate = args.subsampling_factor
-    load_metadata(filename)
-    GLOBALS.Reader.UpdatePipeline()
+    load_metadata(args.dataset)
+    GLOBALS.DataProducer.UpdatePipeline()
+    GLOBALS.LUT = simple.GetColorTransferFunction('ImageFile')
+    reset_lut()
+
+async def async_load(args):
+    if not args.use_vtk_reader:
+        data = subsample(await reader.load_dataset(args.dataset), args.subsampling_factor)
+        proxy = create_proxy(data)
+        GLOBALS.DataProducer.Input = proxy
+        GLOBALS.DataProducer.UpdatePipeline()
+        reset_lut()
+        GLOBALS.update_html_views()
+
+def subsample(data, subsamplingFactor):
+    if subsamplingFactor > 1:
+        from vtkmodules.vtkAcceleratorsVTKmFilters import vtkmExtractVOI as vtkExtractVOI
+        voi = vtkExtractVOI()
+        voi.SetVOI(*data.GetExtent())
+        voi.SetSampleRate(subsamplingFactor, subsamplingFactor, subsamplingFactor)
+        voi.IncludeBoundaryOff()
+        voi.SetInputData(data)
+        log.info('start subsampling')
+        voi.Update()
+        log.info('done subsampling')
+        return voi.GetOutputDataObject(0)
+    else:
+        return data
+
+def create_proxy(data):
+    proxy = simple.PVTrivialProducer()
+    proxy.WholeExtent = data.GetExtent()
+    proxy.GetClientSideObject().SetOutput(data)
+    proxy.UpdatePipeline()
+    return proxy
 
 def load_metadata(filename:str):
     # replace filaname extension with .txt
@@ -91,8 +136,7 @@ def load_metadata(filename:str):
                     GLOBALS.add_segorder(line[len('SEGORDER'):])
                     return
 
-def setup_visualizations(state):
-    GLOBALS.LUT = simple.GetColorTransferFunction('ImageFile')
+def reset_lut():
     if GLOBALS.CategoricalColors:
         lut = GLOBALS.LUT
         lut.InterpretValuesAsCategories = 1
@@ -107,6 +151,13 @@ def setup_visualizations(state):
         lut.ApplyPreset(f'Brewer Diverging Spectral ({l})', True)
     else:
         GLOBALS.LUT.ApplyPreset('Blue Orange (divergent)', True)
+        drange = GLOBALS.DataProducer.PointData['ImageFile'].GetRange(0)
+        log.info('range %s', str(drange))
+        GLOBALS.LUT.RescaleTransferFunction(*drange)
+
+
+def setup_visualizations(state):
+    reset_lut()
     # setup_volume()
     for axis in range(3):
         setup_slice(axis, state)
@@ -166,7 +217,7 @@ def create_volume_view():
     
 def setup_volume():
     simple.SetActiveView(GLOBALS.VolumeView)
-    display = simple.Show(GLOBALS.Reader, GLOBALS.VolumeView)
+    display = simple.Show(GLOBALS.DataProducer, GLOBALS.VolumeView)
     simple.ColorBy(display, ('POINTS', 'ImageFile'))
     display.SetRepresentationType('Volume')
     simple.ResetCamera()
@@ -174,20 +225,11 @@ def setup_volume():
 
 def setup_3dview(state):
     simple.SetActiveView(GLOBALS.VolumeView)
-    ext = GLOBALS.Reader.GetDataInformation().GetExtent()
+    ext = GLOBALS.DataProducer.GetDataInformation().GetExtent()
 
-    # sampleIJK = [1, 1, 1]
-    # # we use prime-factors to ensure we always include the boundaries
-    # for dim in range(3):
-    #     sampleIJK[dim] = primefactors(ext[2*dim + 1] - ext[2*dim], limit=200)[0]
-    # subset = simple.ExtractSubset(Input=GLOBALS.Reader)
-    # subset.SampleRateI = sampleIJK[0]
-    # subset.SampleRateJ = sampleIJK[1]
-    # subset.SampleRateK = sampleIJK[2]
-    subset = GLOBALS.Reader
+    subset = GLOBALS.DataProducer
     display = simple.Show(subset, GLOBALS.VolumeView)
     display.SetRepresentationType('Outline')
-    # display.Opacity = 0.3
     simple.ColorBy(display, ('POINTS', 'ImageFile'))
     display.SetScalarBarVisibility(GLOBALS.VolumeView, True)
     # don't show any SB title
@@ -195,18 +237,12 @@ def setup_3dview(state):
     sb.Title = ""
 
     for axis in range(3):
-        slice = simple.ExtractSubset(Input=GLOBALS.Reader, VOI=ext)
+        slice = simple.ExtractSubset(Input=GLOBALS.DataProducer, VOI=ext)
         slice.VOI[2*axis] = slice.VOI[2*axis+1] = state[f'slice{axis}']
 
         sliceDisplay = simple.Show(GLOBALS.ExtractSubsets[axis], GLOBALS.VolumeView)
         simple.ColorBy(sliceDisplay, ('POINTS', 'ImageFile'))
         sliceDisplay.SetRepresentationType('Slice')
-        # outline = simple.Outline(Input=GLOBALS.ExtractSubsets[axis])
-        # outlineDisplay = simple.Show(outline, GLOBALS.VolumeView)
-        # outlineDisplay.SetRepresentationType('Outline')
-        # outlineDisplay.AmbientColor = CONSTANTS.Colors[axis]
-        # outlineDisplay.DiffuseColor = CONSTANTS.Colors[axis]
-        # outlineDisplay.LineWidth=4
 
     simple.ResetCamera()
     GLOBALS.VolumeView.CenterOfRotation = GLOBALS.VolumeView.CameraFocalPoint.GetData()
@@ -224,7 +260,7 @@ def setup_outlines():
 
 
 def setup_slice(axis:int, state):
-    ext = GLOBALS.Reader.GetDataInformation().GetExtent()
+    ext = GLOBALS.DataProducer.GetDataInformation().GetExtent()
     view = GLOBALS.SliceViews[axis]
     htmlView = GLOBALS.HTMLSliceViews[axis]
 
@@ -235,7 +271,7 @@ def setup_slice(axis:int, state):
     simple.SetActiveView(view)
 
     # create extract slice filter
-    slice = simple.ExtractSubset(Input=GLOBALS.Reader, VOI=ext)
+    slice = simple.ExtractSubset(Input=GLOBALS.DataProducer, VOI=ext)
     slice.VOI[2*axis] = slice.VOI[2*axis+1] = state[f'slice{axis}']
 
     # setup display for slice
@@ -266,5 +302,4 @@ def setup_slice(axis:int, state):
         GLOBALS.ExtractSubsets[axis].VOI[2*axis] = \
             GLOBALS.ExtractSubsets[axis].VOI[2*axis+1] = offset
         text.Text = f'{name[axis]} Slice: {offset * GLOBALS.SubsamplingRate}'
-        for v in GLOBALS.get_html_views():
-            v.update()
+        GLOBALS.update_html_views()

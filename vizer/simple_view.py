@@ -1,5 +1,6 @@
 from paraview import simple
 from trame.widgets import vuetify, paraview
+import asyncio
 
 # setup logging
 from . import utils
@@ -27,8 +28,8 @@ def get_widget():
         GLOBALS.HTMLView = htmlView
     return card
  
-def load_dataset(filename, args):
-    GLOBALS.Reader = simple.OpenDataFile(filename)
+def prepare(args):
+    GLOBALS.Reader = simple.OpenDataFile(args.dataset)
     GLOBALS.Reader.UpdatePipeline()
 
 def setup_visualizations(state):
@@ -38,7 +39,6 @@ def setup_visualizations(state):
     GLOBALS.View.CenterOfRotation = GLOBALS.View.CameraFocalPoint.GetData()
 
 
-
 def create_view():
     view = simple.CreateRenderView()
     # change background color
@@ -46,3 +46,6 @@ def create_view():
     view.UseColorPaletteForBackground = False
     return view
 
+
+async def async_load(args):
+    pass
