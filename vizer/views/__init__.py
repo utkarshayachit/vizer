@@ -1,0 +1,28 @@
+
+def get_view_types():
+    """returns the list of supported view types."""
+    return ['quad', 'simple', 'blank']
+
+def create(meta, opts):
+    """Creates a view from a dataset metadata.
+    Returns None if the file is not supported. Otherwise, an appropriate
+    subclass of base.Base is returned.
+    """
+    from .simple import Simple
+    from .quad import Quad
+    from .blank import Blank
+
+    if opts.force_view == 'quad':
+        return Quad(meta, opts)
+    elif opts.force_view == 'simple':
+        return Simple(meta, opts)
+    elif opts.force_view == 'blank':
+        return Blank(meta, opts)
+
+    if Quad.can_show(meta):
+        return Quad(meta, opts)
+    elif Simple.can_show(meta):
+        return Simple(meta, opts)
+
+    return Blank(meta, opts)
+
