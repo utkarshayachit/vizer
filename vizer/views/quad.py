@@ -61,6 +61,15 @@ class Quad(Base):
             self._state.update(other._state)
             self.update_client_state()
 
+    def _link_interaction(self):
+        for other in Base.get_linked_views(self):
+            for axis in range(4):
+                other._views[axis].CameraPosition = self._views[axis].CameraPosition
+                other._views[axis].CameraFocalPoint = self._views[axis].CameraFocalPoint
+                other._views[axis].CameraViewUp = self._views[axis].CameraViewUp
+                other._views[axis].CameraParallelScale = self._views[axis].CameraParallelScale
+                other._html_views[axis].update()
+
     @staticmethod
     def can_show(meta):
         """returns true if this view can show the dataset"""
@@ -140,6 +149,7 @@ class Quad(Base):
         def interaction_callback(*args, **kwargs):
             """Callback for interaction events."""
             self._copy_slice_camera(view)
+            self._link_interaction()
 
         view.GetInteractor().AddObserver('InteractionEvent', interaction_callback)
         return view
@@ -147,6 +157,12 @@ class Quad(Base):
     def create_3d_view(self):
         view = self.create_render_view()
         view.CameraPosition = [1,1,1]
+
+        def interaction_callback(*args, **kwargs):
+            """Callback for interaction events."""
+            self._link_interaction()
+
+        view.GetInteractor().AddObserver('InteractionEvent', interaction_callback)
         return view
 
     def create_widget(self):

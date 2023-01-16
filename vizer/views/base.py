@@ -86,15 +86,20 @@ class Base(ABC):
         self._producer = None
 
     @classmethod
+    def get_linked_views(cls, view):
+        """returns the list of linked views."""
+        if view is None or view.opts.link_views is False:
+            return []
+        return [ref() for ref in cls._all_views_refs if ref() is not None and ref() != view and isinstance(ref(), type(view))]
+
+    @classmethod
     def propagate_changes_to_linked_views(cls, view):
         """propagate changes to linked views."""
         if view is None or view.opts.link_views is False or cls._propagating or view is None:
             return
         cls._propagating = True
-        for ref in cls._all_views_refs:
-            tview = ref()
-            if tview is not None and tview != view and isinstance(tview, type(view)):
-                tview.copy_state_from(view)
+        for tview in cls.get_linked_views(view):
+            tview.copy_state_from(view)
         cls._propagating = False
 
     @property
