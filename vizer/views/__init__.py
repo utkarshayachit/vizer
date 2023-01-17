@@ -1,7 +1,7 @@
 
 def get_view_types():
     """returns the list of supported view types."""
-    return ['quad', 'simple', 'blank']
+    return ['quad', 'simple', 'blank', 'crop']
 
 def create(meta, opts):
     """Creates a view from a dataset metadata.
@@ -11,6 +11,7 @@ def create(meta, opts):
     from .simple import Simple
     from .quad import Quad
     from .blank import Blank
+    from .crop import Crop
 
     if opts.force_view == 'quad':
         return Quad(meta, opts)
@@ -18,6 +19,8 @@ def create(meta, opts):
         return Simple(meta, opts)
     elif opts.force_view == 'blank':
         return Blank(meta, opts)
+    elif opts.force_view == 'crop':
+        return Crop(meta, opts)
 
     if Quad.can_show(meta):
         return Quad(meta, opts)

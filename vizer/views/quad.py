@@ -18,7 +18,7 @@ class CONSTANTS:
 
 class Quad(Base):
     """A quad view that renders the dataset in four views."""
-    def __init__(self, filename, opts) -> None:
+    def __init__(self, filename, opts, **kwargs) -> None:
         super().__init__(filename, opts)
         self._views = [None, None, None, None]
         self._html_views = [None, None, None, None]
@@ -26,6 +26,8 @@ class Quad(Base):
         self._slices = [None, None, None]
         self._outer_slices = [None] * 6
         self._active_subsampling_factor = self.subsampling_factor
+        self._force_outer_slices = kwargs.get('force_outer_slices', False)
+        self._use_vlayout = kwargs.get('use_vlayout', False)
 
         # storing only data dependent state variables
         # that need to be updated on the client as well
@@ -37,7 +39,7 @@ class Quad(Base):
 
         # next, state we want linked between views when requested.
         # self._state['full_res'] = self._full_res
-        self._state['show_3d_slices'] = True
+        self._state['show_inner_slices'] = False if self._force_outer_slices else True
         self._state['full_res'] = False
         self._block_update = False
 
@@ -212,9 +214,10 @@ class Quad(Base):
 
         # add buttons to the button bar of the bottom of the view
         with self.layout.button_bar:
-            with vuetify.VCol(cols='auto'):
-                vuetify.VCheckbox(off_icon="mdi-border-outside", on_icon="mdi-border-inside",
-                    v_model=(f'{self.id}_show_3d_slices', True), classes="mx-1 my-0", hide_details=True, dense=True)
+            if not self._force_outer_slices:
+                with vuetify.VCol(cols='auto'):
+                    vuetify.VCheckbox(off_icon="mdi-border-outside", on_icon="mdi-border-inside",
+                        v_model=(f'{self.id}_show_inner_slices', self._state['show_inner_slices']), classes="mx-1 my-0", hide_details=True, dense=True)
             with vuetify.VCol(cols='auto'):
                 vuetify.VCheckbox(on_icon="mdi-quality-high", off_icon="mdi-quality-low",
                     v_model=(f'{self.id}_full_res', self._state['full_res']),
@@ -354,21 +357,28 @@ class Quad(Base):
                 simple.Hide(voi, view)
                 self._outer_slices[axis*2+side] = voi
 
-        state = get_server().state
-        @state.change(f'{self.id}_show_3d_slices')
-        def show_3d_slices_changed(**kwargs):
-            show_slices = kwargs[f'{self.id}_show_3d_slices']
-            # if self._state['show_3d_slices'] == show_slices:
-            #     return
-            self._state['show_3d_slices'] = show_slices
-            for axis in range(3):
-                simple.Show(self._slices[axis], view) if show_slices else simple.Hide(self._slices[axis], view)
-                for side in range(2):
-                    simple.Show(self._outer_slices[axis*2+side], view) if not show_slices else simple.Hide(self._outer_slices[axis*2+side], view)
+        self._update_3d_slice_visibility()
 
+        state = get_server().state
+        @state.change(f'{self.id}_show_inner_slices')
+        def show_inner_slices_changed(**kwargs):
+            show_inner_slices = kwargs[f'{self.id}_show_inner_slices']
+            self._state['show_inner_slices'] = show_inner_slices
+            self._update_3d_slice_visibility()
             # update the html view for the 3d view
             self._html_views[3].update()
             Base.propagate_changes_to_linked_views(self)
+
+
+    def _update_3d_slice_visibility(self):
+        """Updates the visibility of the 3D slices."""
+        show_inner_slices = self._state['show_inner_slices']
+        view = self._views[3]
+        for axis in range(3):
+            simple.Show(self._slices[axis], view) if show_inner_slices else simple.Hide(self._slices[axis], view)
+            for side in range(2):
+                simple.Show(self._outer_slices[axis*2+side], view) if not show_inner_slices else simple.Hide(self._outer_slices[axis*2+side], view)
+
 
     def create_outline_pipelines(self):
         for axis in range(3):
