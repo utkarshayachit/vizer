@@ -1,5 +1,5 @@
 from trame.app import get_server, asynchronous
-from trame.widgets import vuetify, html, paraview
+from trame.widgets import client, vuetify, html, paraview
 from trame.ui.vuetify import VAppLayout
 
 from . import utils, views, readers
@@ -42,6 +42,8 @@ def exec():
 
     layout = VAppLayout(server)
     with layout:
+        # disable vertical scrollbars (they are not needed)
+        client.Style('html { overflow-y: hidden; }')
         with layout.root as root:
             with html.Div(classes='d-flex flex-row flex-nowrap fill-height'):
                 for v in all_views:
