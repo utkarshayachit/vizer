@@ -1,5 +1,5 @@
 from trame.app import get_server, asynchronous
-from trame.widgets import vuetify, html
+from trame.widgets import vuetify, html, paraview
 from trame.ui.vuetify import VAppLayout
 
 from . import utils, views, readers
@@ -22,6 +22,8 @@ def create_view(filename, args):
 
 def exec():
     server = get_server()
+    paraview.initialize(server)
+
     state, ctrl = server.state, server.controller
     server.cli.add_argument('--dataset', help='dataset(s) to load (REQUIRED) (REPEATABLE)', required=True, action='append')
     server.cli.add_argument('--create-on-server-ready', help='file to create when server is ready')

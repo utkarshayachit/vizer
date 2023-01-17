@@ -151,7 +151,15 @@ class Quad(Base):
             self._copy_slice_camera(view)
             self._link_interaction()
 
+        def fix_parallel_scale_callback(*args, **kwargs):
+            """callback to fix the parallel scale on each render."""
+            height = view.ViewSize[1] * self._active_subsampling_factor
+            # ensures that the scale to a value to cause the
+            # image to appear pixelated
+            view.CameraParallelScale = max(height/2, view.GetActiveCamera().GetParallelScale())
+
         view.GetInteractor().AddObserver('InteractionEvent', interaction_callback)
+        view.SMProxy.AddObserver('StartEvent', fix_parallel_scale_callback)
         return view
 
     def create_3d_view(self):
@@ -309,8 +317,6 @@ class Quad(Base):
         @state.change(f'{self.id}_slice_{axis}')
         def slice_changed(**kwargs):
             val = kwargs[f'{self.id}_slice_{axis}']
-            # if self._state[f'slice_{axis}'] == val:
-            #     return
             self._state[f'slice_{axis}'] = self._slices[axis].VOI[axis*2] = self._slices[axis].VOI[axis*2+1] = val
             text.Text = f'{CONSTANTS.AxisNames[axis]} Slice {self._active_subsampling_factor * val}'
             self.update_html_views()
