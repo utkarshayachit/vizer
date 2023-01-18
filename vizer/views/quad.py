@@ -14,7 +14,7 @@ log = utils.get_logger(__name__)
 
 class CONSTANTS:
     Colors = [ [1., 0., 0.], [1., 1., 0.],  [0., 1., 0.] ]
-    AxisNames = ['X', 'Y', 'Z']
+    AxisNames = ['x', 'y', 'z']
 
 from vtkmodules.vtkRenderingCore import vtkTextActor
 
@@ -82,7 +82,7 @@ class Quad(Base):
         if self._state['full_res'] != other._state['full_res']:
             self.toggle_full_res()
         elif not self._block_update and self._state != other._state:
-            log.info(f'propagating changes from {other.id} to {self.id} ...')
+            # log.info(f'propagating changes from {other.id} to {self.id} ...')
             self._state.update(other._state)
             self.update_client_state()
 
@@ -94,6 +94,13 @@ class Quad(Base):
                 other._views[axis].CameraViewUp = self._views[axis].CameraViewUp
                 other._views[axis].CameraParallelScale = self._views[axis].CameraParallelScale
                 other._html_views[axis].update()
+
+    @property
+    def annotations_txt(self):
+        """returns the annotations for this view."""
+        annotations = self._annotations[:]
+        annotations.append(f'subsampling: {self._active_subsampling_factor}X')
+        return '\n'.join(annotations)
 
     @staticmethod
     def can_show(meta):
@@ -129,18 +136,26 @@ class Quad(Base):
     def load_categories(self):
         """Loads the color categories from meta data file associated with the dataset."""
         self._categories = {}
+        self._annotations = []
         meta_filename = f'{os.path.splitext(self.meta.filename)[0]}.txt'
+
         if not os.path.exists(meta_filename):
             return
         with open(meta_filename, 'r') as f:
             for line in f.readlines():
-                line = line.strip().lower()
-                if line.startswith('segorder:'):
-                    line = line[len('segorder:'):]
+                line = line.strip()
+                lline = line.lower()
+                if lline.startswith('segorder:'):
+                    lline = lline[len('segorder:'):]
                     regex = r"(?:\s*(?P<value>\d+)-(?P<text>[^,]+),?)"
-                    matches = re.finditer(regex, line)
+                    matches = re.finditer(regex, lline)
                     self._categories = dict([(int(m.group('value')), m.group('text')) for m in matches])
-                    break
+                elif lline.startswith('samplename:'):
+                    line = 'sample name: ' + line[len('samplename:'):].strip()
+                    self._annotations.append(line)
+                elif lline.startswith('segmented'):
+                    line = 'segmented: ' + line[len('segmented'):].strip()
+                    self._annotations.append(line)
         log.info(f'{self.id}: Loaded categories: {self._categories}')
 
     def _copy_slice_camera(self, view):
@@ -279,6 +294,9 @@ class Quad(Base):
         # update color map
         self.update_color_map()
 
+        # update annotations
+        self._annotations_source.Text = self.annotations_txt
+
         # update voi's for slices
         ext = self.producer.GetDataInformation().GetExtent()
         for axis in range(3):
@@ -345,7 +363,7 @@ class Quad(Base):
 
         # add annotation text
         text = simple.Text()
-        text.Text = f'{CONSTANTS.AxisNames[axis]} Slice {self._active_subsampling_factor * val}'
+        text.Text = f'{CONSTANTS.AxisNames[axis]}: {self._active_subsampling_factor * val}'
         textDisplay = simple.Show(text, self._views[axis])
         textDisplay.Color = CONSTANTS.Colors[axis]
         textDisplay.FontSize = 16
@@ -356,7 +374,7 @@ class Quad(Base):
         def slice_changed(**kwargs):
             val = kwargs[f'{self.id}_slice_{axis}']
             self._state[f'slice_{axis}'] = self._slices[axis].VOI[axis*2] = self._slices[axis].VOI[axis*2+1] = val
-            text.Text = f'{CONSTANTS.AxisNames[axis]} Slice {self._active_subsampling_factor * val}'
+            text.Text = f'{CONSTANTS.AxisNames[axis]}: {self._active_subsampling_factor * val}'
             self.update_html_views()
             Base.propagate_changes_to_linked_views(self)
 
@@ -391,8 +409,18 @@ class Quad(Base):
                 slice_display.LookupTable = self._lut
                 simple.Hide(voi, view)
                 self._outer_slices[axis*2+side] = voi
-
         self._update_3d_slice_visibility()
+
+        # annotation
+        text = simple.Text()
+        text.Text = '[pending]'
+        textDisplay = simple.Show(text, view)
+        textDisplay.FontSize = 16
+        textDisplay.FontFamily = 'Arial'
+        textDisplay.Justification = 'Right'
+        textDisplay.WindowLocation = 'Upper Right Corner'
+        textDisplay.Opacity = 0.3
+        self._annotations_source = text
 
         state = get_server().state
         @state.change(f'{self.id}_show_inner_slices')

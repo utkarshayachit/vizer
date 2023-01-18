@@ -73,18 +73,19 @@ class RawConfig:
 
         # extract spacing from filename
         # match _1pt42um_ or _1.42um_
-        sreg1 = re.compile(r"_(?P<spacing>\d+\.?\d*)(?P<unit>[a-z]+)_")
+        sreg1 = re.compile(r"_(?P<spacing>\d+\.?\d*)(?P<unit>[a-z]+m)_")
         m = sreg1.search(filename)
         if m:
             groups = m.groupdict()
             config.spacing = Quantity(f"{groups.get('spacing', 0)} {groups.get('unit', 'm')}")
         else:
-            sreg2 = re.compile(r"_(?P<spacing1>\d+)(pt(?<spacing2>\d+)?(?P<unit>[a-z]+)_")
+            sreg2 = re.compile(r"_(?P<spacing1>\d+)(pt(?P<spacing2>\d+))?(?P<unit>[a-z]+m)_")
             m = sreg2.search(filename)
             if m:
                 group = m.groupdict()
-                num = float(group.get('spacing1', 0)) + float(f'0.{group.get("spacing2", 0)}')
-                config.spacing = Quantity(f"{num} {groups.get('unit', 'm')}")
+                num =  group.get('spacing1', '0') + '.' + group.get("spacing2", '0')
+                unit = group.get('unit', 'm')
+                config.spacing = Quantity(f"{num} {unit}")
         return config if config.is_valid() else None
 
 
