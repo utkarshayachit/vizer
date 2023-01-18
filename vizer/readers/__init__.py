@@ -3,6 +3,7 @@ from vizer import utils
 import re
 import asyncio
 import numpy
+from quantiphy import Quantity
 
 from paraview import simple, vtk
 from vtkmodules.vtkCommonDataModel import vtkImageData, vtkStructuredData
@@ -17,9 +18,10 @@ class RawConfig:
         self.dims = [0, 0, 0]
         self.bits = 0
         self.unsigned = False
+        self.spacing = None
 
     def __str__(self) -> str:
-        return f'bits: {self.bits}, unsigned: {self.unsigned}, dims: {self.dims}'
+        return f'bits: {self.bits}, unsigned: {self.unsigned}, dims: {self.dims}, spacing: {self.spacing:q} ({self.spacing.real})'
 
     def is_valid(self) -> bool:
         return self.dims[0] * self.dims[1] * self.dims[2] > 0 and self.bits > 0
@@ -43,6 +45,10 @@ class RawConfig:
         return [0, self.dims[0]-1, 0, self.dims[1]-1, 0, self.dims[2]-1]
 
     @property
+    def vtk_spacing(self):
+        return [1.0, 1.0, 1.0]
+
+    @property
     def dtype(self):
         """returns numpy dtype"""
         if self.unsigned:
@@ -64,6 +70,21 @@ class RawConfig:
         config.dims[2] = int(groups.get('zdim', 0))
         config.bits = int(groups.get('bits', 0))
         config.unsigned = True if 'unsigned' in groups else False
+
+        # extract spacing from filename
+        # match _1pt42um_ or _1.42um_
+        sreg1 = re.compile(r"_(?P<spacing>\d+\.?\d*)(?P<unit>[a-z]+)_")
+        m = sreg1.search(filename)
+        if m:
+            groups = m.groupdict()
+            config.spacing = Quantity(f"{groups.get('spacing', 0)} {groups.get('unit', 'm')}")
+        else:
+            sreg2 = re.compile(r"_(?P<spacing1>\d+)(pt(?<spacing2>\d+)?(?P<unit>[a-z]+)_")
+            m = sreg2.search(filename)
+            if m:
+                group = m.groupdict()
+                num = float(group.get('spacing1', 0)) + float(f'0.{group.get("spacing2", 0)}')
+                config.spacing = Quantity(f"{num} {groups.get('unit', 'm')}")
         return config if config.is_valid() else None
 
 
@@ -101,7 +122,7 @@ class Metadata:
             pretty_type = 'None'
         else:
             pretty_type = simple.servermanager.vtkPVDataInformation.GetDataSetTypeAsString(self.vtk_type)
-        return f'filename: {self.filename}, vtk_type: {self.vtk_type} ({pretty_type}), is_structured: {self.is_structured}'
+        return f'filename: {self.filename}, vtk_type: {self.vtk_type} ({pretty_type}), is_structured: {self.is_structured} raw_config: {self.raw_config}'
 
     def is_empty(self):
         return self.vtk_type is None or self.vtk_type < 0
@@ -121,6 +142,7 @@ def _create_vtk_image_data(raw_config: RawConfig, buffer:numpy.ndarray=None):
     """creates a vtkImageData object with the given dimensions and scalar type"""
     dataset = vtkImageData()
     dataset.SetExtent(raw_config.vtk_extent)
+    dataset.SetSpacing(raw_config.vtk_spacing)
     if buffer is None:
         dataset.AllocateScalars(raw_config.vtk_scalar_type, 1)
         dataset.GetPointData().GetScalars().SetName('ImageFile')
@@ -144,6 +166,7 @@ def sync_read(meta, args):
             producer = simple.OpenDataFile(meta.filename,
                 DataScalarType=meta.raw_config.vtk_scalar_type,
                 DataExtent=meta.raw_config.vtk_extent,
+                DataSpacing=meta.raw_config.vtk_spacing,
                 DataByteOrder='LittleEndian')
         else:
             producer = simple.OpenDataFile(meta.filename)

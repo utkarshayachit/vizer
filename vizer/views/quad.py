@@ -2,7 +2,7 @@ r"""quad view"""
 
 from .base import Base
 from vizer import utils
-
+from vizer.readers import RawConfig
 import os.path
 import re
 
@@ -15,6 +15,29 @@ log = utils.get_logger(__name__)
 class CONSTANTS:
     Colors = [ [1., 0., 0.], [1., 1., 0.],  [0., 1., 0.] ]
     AxisNames = ['X', 'Y', 'Z']
+
+from vtkmodules.vtkRenderingCore import vtkTextActor
+
+class ScaleActor(vtkTextActor):
+    def __init__(self, config: RawConfig):
+        super().__init__()
+        self._config = config
+        self._setup()
+
+    def update_scale(self, scale):
+        q = self._config.spacing
+        self.SetInput(f'scale: 1 px = {q.scale(scale):#.2q}')
+
+    def _setup(self):
+        self.SetInput('[missing update]')
+        self.SetPosition(20, 10)
+        self.SetTextScaleModeToNone()
+        self.GetTextProperty().SetFontSize(16)
+        self.GetTextProperty().SetColor(0, 0, 0)
+        self.GetTextProperty().SetFontFamilyToArial()
+        self.GetTextProperty().FrameOn()
+        self.GetTextProperty().SetFrameWidth(3)
+        self.GetTextProperty().SetBackgroundRGBA(1, 1, 1, 1)
 
 class Quad(Base):
     """A quad view that renders the dataset in four views."""
@@ -147,6 +170,12 @@ class Quad(Base):
         view.CameraPosition = pos[axis]
         view.CameraViewUp = up[axis]
         view.InteractionMode = '2D'
+        view.OrientationAxesVisibility = False
+
+        pvview = view.GetClientSideObject()
+        renderer = pvview.GetRenderer(pvview.NON_COMPOSITED_RENDERER)
+        legend = ScaleActor(self.meta.raw_config)
+        renderer.AddActor(legend)
 
         def interaction_callback(*args, **kwargs):
             """Callback for interaction events."""
@@ -156,9 +185,13 @@ class Quad(Base):
         def fix_parallel_scale_callback(*args, **kwargs):
             """callback to fix the parallel scale on each render."""
             height = view.ViewSize[1] * self._active_subsampling_factor
+            half_height = height / 2
             # ensures that the scale to a value to cause the
             # image to appear pixelated
-            view.CameraParallelScale = max(height/2, view.GetActiveCamera().GetParallelScale())
+            view.CameraParallelScale = max(half_height, view.GetActiveCamera().GetParallelScale())
+
+            scale = self._active_subsampling_factor * view.CameraParallelScale / half_height
+            legend.update_scale(scale)
 
         view.GetInteractor().AddObserver('InteractionEvent', interaction_callback)
         view.SMProxy.AddObserver('StartEvent', fix_parallel_scale_callback)
@@ -315,6 +348,8 @@ class Quad(Base):
         text.Text = f'{CONSTANTS.AxisNames[axis]} Slice {self._active_subsampling_factor * val}'
         textDisplay = simple.Show(text, self._views[axis])
         textDisplay.Color = CONSTANTS.Colors[axis]
+        textDisplay.FontSize = 16
+        textDisplay.FontFamily = 'Arial'
 
         state = get_server().state
         @state.change(f'{self.id}_slice_{axis}')
