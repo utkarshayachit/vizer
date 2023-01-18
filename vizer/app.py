@@ -1,53 +1,70 @@
-from trame.app import get_server
-from trame.widgets import vuetify
+from trame.app import get_server, asynchronous
+from trame.widgets import client, vuetify, html, paraview
 from trame.ui.vuetify import VAppLayout
 
-from . import utils, simple_view, quad_view
+from . import utils, views, readers
+
 import os
 import sys
+import asyncio
 
 log = utils.get_logger(__name__)
 
+def create_view(filename, args):
+    """Creates a view from a dataset metadata."""
+    # read dataset metadata
+    meta = readers.Metadata(filename)
+    log.info(f'metadata: {meta}')
+    view = views.create(meta, args)
+    log.info("created view '%s'", view.__class__.__name__)
+    return view
+
+
 def exec():
     server = get_server()
+    paraview.initialize(server)
+
     state, ctrl = server.state, server.controller
-    server.cli.add_argument('--dataset',help='dataset to load (REQUIRED)', required=True)
-    server.cli.add_argument('--create-on-server-ready',
-            help='file to create when server is ready')
+    server.cli.add_argument('--dataset', help='dataset(s) to load (REQUIRED) (REPEATABLE)', required=True, action='append')
+    server.cli.add_argument('--create-on-server-ready', help='file to create when server is ready')
     server.cli.add_argument('--use-vtk-reader',
-            help='use standard VTK reader', default=False, action='store_true')
+            help='use standard VTK reader (default: False)', default=False, action='store_true')
     server.cli.add_argument('--subsampling-factor',
             help='specify image sub-sampling factor', default=4, type=int)
+    server.cli.add_argument('--force-view', help="force view type (primarily for debugging)", default=None,
+        choices=views.get_view_types())
+    server.cli.add_argument('--link-views', help='link interaction between views of same time (default: True)', default=False, action='store_true')
 
     # parse args
     args = server.cli.parse_known_args()[0]
+    
+    all_views = [create_view(dataset.format_map(os.environ), args) for dataset in args.dataset]
 
-    # dataset to load
-    dataset = args.dataset.format_map(os.environ)
-    if quad_view.can_show(dataset):
-        viewer = quad_view
-    elif simple_view.can_show(dataset):
-        viewer = simple_view
-    else:
-        log.error('dataset not supported')
-        return
-
-    log.info('loading dataset "%s"', dataset)
-    viewer.load_dataset(dataset, args)
+    layout = VAppLayout(server)
+    with layout:
+        # disable vertical scrollbars (they are not needed)
+        client.Style('html { overflow-y: hidden; }')
+        with layout.root as root:
+            with html.Div(classes='d-flex flex-row flex-nowrap fill-height'):
+                for v in all_views:
+                    v.widget
 
     def startup(*_, **__):
         """callback which loads dataset when the server starts up"""
+
+        # load dataset, synchronously; if possible only dummy data is loaded
+        # and actual reading is done asynchronously
+        for view in all_views:
+            view.set_status('preparing data ...')
+
+            # setup async task to read data; if needed.
+            asynchronous.create_task(view.load_dataset())
+        
         if args.create_on_server_ready is not None:
             fname = args.create_on_server_ready.format_map(os.environ)
             with open(fname, 'w') as f:
                 f.write('server ready')
-
-    with VAppLayout(server) as layout:
-        with layout.root:
-            viewer.get_widget()
-
-    log.info('setting up visualizations')
-    viewer.setup_visualizations(state)
+            log.info('created \'%s\'', fname)
 
     log.info('starting server')
     ctrl.on_server_ready.add(startup)
