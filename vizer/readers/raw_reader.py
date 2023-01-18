@@ -1,6 +1,7 @@
 from vizer import utils
 import numpy
 import concurrent.futures
+import time
 
 from vtkmodules.vtkCommonDataModel import vtkStructuredData
 from vtkmodules.vtkCommonExecutionModel import vtkExtentTranslator
@@ -9,8 +10,8 @@ log = utils.get_logger(__name__)
 
 def read(filename, raw_config, num_chunks):
     """read data from a raw file"""
+    t = time.time()
     log.info('start read %s in %d chunks', filename, num_chunks)
-
     word_size = numpy.dtype(raw_config.dtype).itemsize
 
     # allocate memory buffer
@@ -19,8 +20,7 @@ def read(filename, raw_config, num_chunks):
     with concurrent.futures.ThreadPoolExecutor() as executor:
         for count, offset in _compute_byte_chunks(raw_config, num_chunks):
             executor.submit(_read_bytes, filename, offset, view[offset:offset+count])
-    log.info('end read')
-
+    log.info('read %s in %d chunks in %f seconds', filename, num_chunks, time.time() - t)
     return numpy.frombuffer(bytes_buffer, dtype=raw_config.dtype)
 
 def _compute_byte_chunks(raw_config, num_chunks):
