@@ -41,11 +41,42 @@ class ScaleActor(vtkTextActor):
 
 class UIBuilder:
 
+    def toggle_callback(view, var, value):
+        view._state[var] = value
+        view.update_client_state()
+
+    @staticmethod
+    def toggle_button(view, var, on_icon, off_icon, on_text, off_text, **kwargs):
+        if 'click' in kwargs:
+            callback = kwargs['click']
+            click_callback = lambda _: callback()
+        else:
+            click_callback = lambda value: UIBuilder.toggle_callback(view, var, value)
+
+        with vuetify.VTooltip(left=True, v_if=f'{view.id}_{var}'):
+            with vuetify.Template(v_slot_activator="{on, attrs}"):
+                vuetify.VIcon(on_icon,
+                    click=lambda **_: click_callback(False),
+                    classes="mr-4",
+                    v_bind="attrs",
+                    v_on="on",
+                    __properties=[("v_bind", "v-bind"), ("v_on", "v-on")])
+            html.Pre(on_text)
+        with vuetify.VTooltip(left=True, v_if=f'!{view.id}_{var}'):
+            with vuetify.Template(v_slot_activator="{on, attrs}"):
+                vuetify.VIcon(off_icon,
+                    click=lambda **_: click_callback(True),
+                    classes="mr-4",
+                    v_bind="attrs",
+                    v_on="on",
+                    __properties=[("v_bind", "v-bind"), ("v_on", "v-on")])
+            html.Pre(off_text)
+
     @staticmethod
     def maximize_button(view, i, j):
         with vuetify.VTooltip(left=True, v_if=f'{view.id}_no_maximized'):
             with vuetify.Template(v_slot_activator="{on, attrs}"):
-                vuetify.VIcon("mdi-window-maximize",
+                vuetify.VIcon("mdi-border-all",
                     click=lambda **_: view.toggle_maximize(i, j),
                     classes="mr-4",
                     v_bind="attrs",
@@ -54,7 +85,7 @@ class UIBuilder:
             html.Pre("Maximize")
         with vuetify.VTooltip(left=True, v_if=f'!{view.id}_no_maximized'):
             with vuetify.Template(v_slot_activator="{on, attrs}"):
-                vuetify.VIcon("mdi-border-all",
+                vuetify.VIcon("mdi-window-maximize",
                     click=lambda **_: view.toggle_maximize(i, j),
                     classes="mr-4",
                     v_bind="attrs",
@@ -313,18 +344,22 @@ class Quad(Base):
         with self.layout.button_bar:
             if not self._force_outer_slices:
                 with vuetify.VCol(cols='auto'):
-                    vuetify.VCheckbox(off_icon="mdi-border-outside", on_icon="mdi-border-inside",
-                        v_model=(f'{self.id}_show_inner_slices', self._state['show_inner_slices']), classes="ma-0", hide_details=True, dense=True)
+                    UIBuilder.toggle_button(self, var='show_inner_slices', off_icon='mdi-border-outside', on_icon='mdi-border-inside',
+                      on_text='Show outer faces', off_text='Show inner slices')
             with vuetify.VCol(cols='auto'):
-                vuetify.VCheckbox(on_icon="mdi-quality-high", off_icon="mdi-quality-low",
-                    v_model=(f'{self.id}_full_res', self._state['full_res']),
-                    classes="ma-0", hide_details=True, dense=True,
+                UIBuilder.toggle_button(self, var='full_res', on_icon='mdi-quality-high', off_icon='mdi-quality-low',
+                    off_text='Show full resolution', on_text='Show low resolution',
                     click=self.toggle_full_res)
             with vuetify.VCol(cols='auto'):
-                # I use checkbox here to it has a consistent appearance with the other buttons
-                vuetify.VCheckbox(on_icon="mdi-fit-to-screen", off_icon="mdi-fit-to-screen", hide_details=True, dense=True,
-                    classes="ma-0",
-                    click=self.reset_cameras)
+                with vuetify.VTooltip(left=True):
+                    with vuetify.Template(v_slot_activator="{on, attrs}"):
+                        vuetify.VIcon("mdi-fit-to-screen",
+                        click=self.reset_cameras,
+                        classes="mr-4",
+                        v_bind="attrs",
+                        v_on="on",
+                        __properties=[("v_bind", "v-bind"), ("v_on", "v-on")])
+                    html.Pre("Reset zoom for all views")
 
     def update_pipeline(self):
         # update domains based on current dataset.
