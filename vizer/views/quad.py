@@ -323,7 +323,8 @@ class Quad(Base):
 
         # setup color map we'll use for this view
         self._lut = simple.GetColorTransferFunction(f'{self.id}_lut')
-        self._lut.ApplyPreset('Blue Orange (divergent)', True)
+        self._lut.ApplyPreset('Grayscale', True)
+        self._lut.RGBPoints = [0, 0.2, 0.2, 0.2, 1, 1, 1, 1]
 
         # create the pipeline
         for axis in range(3):
@@ -472,6 +473,7 @@ class Quad(Base):
             log.info(f'{self.id}: range: {drange}')
             self._lut.InterpretValuesAsCategories = False
             self._lut.RescaleTransferFunction(drange[0], drange[1])
+
 
         # show scalar bar in 3D view
         sb = simple.GetScalarBar(self._lut, self._views[3])
