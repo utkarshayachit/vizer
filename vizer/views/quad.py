@@ -7,7 +7,7 @@ import os.path
 import re
 
 from paraview import simple, vtk
-from trame.widgets import vuetify, paraview
+from trame.widgets import vuetify, paraview, html
 from trame.app import get_server, asynchronous
 
 log = utils.get_logger(__name__)
@@ -39,6 +39,30 @@ class ScaleActor(vtkTextActor):
         self.GetTextProperty().SetFrameWidth(3)
         self.GetTextProperty().SetBackgroundRGBA(1, 1, 1, 1)
 
+class UIBuilder:
+
+    @staticmethod
+    def maximize_button(view, i, j):
+        with vuetify.VTooltip(left=True, v_if=f'{view.id}_no_maximized'):
+            with vuetify.Template(v_slot_activator="{on, attrs}"):
+                vuetify.VIcon("mdi-window-maximize",
+                    click=lambda **_: view.toggle_maximize(i, j),
+                    classes="mr-4",
+                    v_bind="attrs",
+                    v_on="on",
+                    __properties=[("v_bind", "v-bind"), ("v_on", "v-on")])
+            html.Pre("Maximize")
+        with vuetify.VTooltip(left=True, v_if=f'!{view.id}_no_maximized'):
+            with vuetify.Template(v_slot_activator="{on, attrs}"):
+                vuetify.VIcon("mdi-border-all",
+                    click=lambda **_: view.toggle_maximize(i, j),
+                    classes="mr-4",
+                    v_bind="attrs",
+                    v_on="on",
+                    __properties=[("v_bind", "v-bind"), ("v_on", "v-on")])
+            html.Pre("Restore")
+
+
 class Quad(Base):
     """A quad view that renders the dataset in four views."""
     def __init__(self, filename, opts, **kwargs) -> None:
@@ -64,6 +88,9 @@ class Quad(Base):
         # self._state['full_res'] = self._full_res
         self._state['show_inner_slices'] = False if self._force_outer_slices else True
         self._state['full_res'] = False
+        self._state['max_row'] = 0
+        self._state['max_col'] = 0
+        self._state['no_maximized'] = True
         self._block_update = False
 
         # load the color categories, if present
@@ -176,6 +203,18 @@ class Quad(Base):
             target_view.CameraPosition = pos
             self._html_views[i].update()
 
+    def toggle_maximize(self, i, j):
+        if self._state['no_maximized']:
+            self._state['no_maximized'] = False
+            self._state['max_row'] = i
+            self._state['max_col'] = j
+        else:
+            self._state['no_maximized'] = True
+            self._state['max_row'] = -1
+            self._state['max_col'] = -1
+        self.update_client_state()
+        Base.propagate_changes_to_linked_views(self)
+
     def create_slice_view(self, axis:int):
         """Creates a slice view for the given axis."""
         view = self.create_render_view()
@@ -224,57 +263,67 @@ class Quad(Base):
         return view
 
     def create_widget(self):
+        self.update_client_state()
+
         with self.layout.viewport:
-            with vuetify.VRow(no_gutters=True, classes="grow"):
-                with vuetify.VCol():
+            with vuetify.VRow(v_if=f'{self._id}_no_maximized || {self.id}_max_row == 0', no_gutters=True, classes="grow"):
+                with vuetify.VCol(v_if=f'{self._id}_no_maximized || {self.id}_max_col == 0'):
                     with vuetify.VContainer(classes="fill-height pa-0 ma-0"):
                         self._views[0] = self.create_slice_view(0)
                         self._html_views[0] = self.create_html_view(self._views[0])
-                with vuetify.VCol():
+                with vuetify.VCol(v_if=f'{self._id}_no_maximized || {self.id}_max_col == 1'):
                     with vuetify.VContainer(classes="fill-height pa-0 ma-0"):
                         self._views[1] = self.create_slice_view(1)
                         self._html_views[1] = self.create_html_view(self._views[1])
 
-            with vuetify.VRow(no_gutters=True, classes="shrink"):
-                with vuetify.VCol():
+            with vuetify.VRow(v_if=f'{self._id}_no_maximized || {self.id}_max_row == 0', no_gutters=True, classes="shrink"):
+                with vuetify.VCol(v_if=f'{self._id}_no_maximized || {self.id}_max_col == 0'):
                     vuetify.VSlider(dense=True, hide_details=True,
                         min=(f'{self.id}_slice_min_0', 0), max=(f'{self.id}_slice_max_0', 0), v_model=(f'{self.id}_slice_0', 0))
-                with vuetify.VCol():
+                with vuetify.VCol(v_if=f'{self._id}_no_maximized || {self.id}_max_col == 0', cols="auto"):
+                    UIBuilder.maximize_button(self, 0, 0)
+                with vuetify.VCol(v_if=f'{self._id}_no_maximized || {self.id}_max_col == 1'):
                     vuetify.VSlider(dense=True, hide_details=True,
                         min=(f'{self.id}_slice_min_1', 0), max=(f'{self.id}_slice_max_1', 0), v_model=(f'{self.id}_slice_1', 0))
+                with vuetify.VCol(v_if=f'{self._id}_no_maximized || {self.id}_max_col == 1', cols="auto"):
+                    UIBuilder.maximize_button(self, 0, 1)
 
-            with vuetify.VRow(no_gutters=True, classes="grow"):
-                with vuetify.VCol():
+            with vuetify.VRow(v_if=f'{self._id}_no_maximized || {self.id}_max_row == 1', no_gutters=True, classes="grow"):
+                with vuetify.VCol(v_if=f'{self._id}_no_maximized || {self.id}_max_col == 0'):
                     with vuetify.VContainer(classes="fill-height pa-0 ma-0"):
                         self._views[2] = self.create_slice_view(2)
                         self._html_views[2] = self.create_html_view(self._views[2])
-                with vuetify.VCol():
+                with vuetify.VCol(v_if=f'{self._id}_no_maximized || {self.id}_max_col == 1'):
                     with vuetify.VContainer(classes="fill-height pa-0 ma-0"):
                         self._views[3] = self.create_3d_view()
                         self._html_views[3] = self.create_html_view(self._views[3])
 
-            with vuetify.VRow(no_gutters=True, classes="shrink"):
-                with vuetify.VCol():
+            with vuetify.VRow(v_if=f'{self._id}_no_maximized || {self.id}_max_row == 1', no_gutters=True, classes="shrink"):
+                with vuetify.VCol(v_if=f'{self._id}_no_maximized || {self.id}_max_col == 0'):
                     vuetify.VSlider(dense=True, hide_details=True,
                         min=(f'{self.id}_slice_min_2', 0), max=(f'{self.id}_slice_max_2', 0), v_model=(f'{self.id}_slice_2', 0))
-                with vuetify.VCol():
+                with vuetify.VCol(v_if=f'{self._id}_no_maximized || {self.id}_max_col == 0', cols="auto"):
+                    UIBuilder.maximize_button(self, 1, 0)
+                with vuetify.VCol(v_if=f'{self._id}_no_maximized || {self.id}_max_col == 1'):
                     vuetify.VContainer(classes="fill-height")
+                with vuetify.VCol(v_if=f'{self._id}_no_maximized || {self.id}_max_col == 1', cols="auto"):
+                    UIBuilder.maximize_button(self, 1, 1)
 
         # add buttons to the button bar of the bottom of the view
         with self.layout.button_bar:
             if not self._force_outer_slices:
                 with vuetify.VCol(cols='auto'):
                     vuetify.VCheckbox(off_icon="mdi-border-outside", on_icon="mdi-border-inside",
-                        v_model=(f'{self.id}_show_inner_slices', self._state['show_inner_slices']), classes="mx-1 my-0", hide_details=True, dense=True)
+                        v_model=(f'{self.id}_show_inner_slices', self._state['show_inner_slices']), classes="ma-0", hide_details=True, dense=True)
             with vuetify.VCol(cols='auto'):
                 vuetify.VCheckbox(on_icon="mdi-quality-high", off_icon="mdi-quality-low",
                     v_model=(f'{self.id}_full_res', self._state['full_res']),
-                    classes="mx-1 my-0", hide_details=True, dense=True,
+                    classes="ma-0", hide_details=True, dense=True,
                     click=self.toggle_full_res)
             with vuetify.VCol(cols='auto'):
                 # I use checkbox here to it has a consistent appearance with the other buttons
                 vuetify.VCheckbox(on_icon="mdi-fit-to-screen", off_icon="mdi-fit-to-screen", hide_details=True, dense=True,
-                    classes="mx-1 my-0",
+                    classes="ma-0",
                     click=self.reset_cameras)
 
     def update_pipeline(self):
@@ -313,6 +362,7 @@ class Quad(Base):
             self.reset_cameras()
 
         self.update_client_state()
+        self.update_html_views()
 
     def create_pipeline(self):
         if hasattr(self, '_created_pipeline'):
