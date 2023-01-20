@@ -2,13 +2,16 @@ from trame.app import get_server, asynchronous
 from trame.widgets import client, vuetify, html, paraview
 from trame.ui.vuetify import VAppLayout
 
-from . import utils, views, readers
-
 import os
 import sys
 import asyncio
 
+from paraview.simple import LoadPlugins
+LoadPlugins(os.path.join(os.path.dirname(__file__), 'plugins', 'outline_filter.py'))
+
+from . import utils, views, readers
 log = utils.get_logger(__name__)
+
 
 def create_view(filename, args):
     """Creates a view from a dataset metadata."""
@@ -23,6 +26,7 @@ def create_view(filename, args):
 def exec():
     server = get_server()
     paraview.initialize(server)
+
 
     state, ctrl = server.state, server.controller
     server.cli.add_argument('--dataset', help='dataset(s) to load (REQUIRED) (REPEATABLE)', required=True, action='append')

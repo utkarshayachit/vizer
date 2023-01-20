@@ -15,6 +15,7 @@ log = utils.get_logger(__name__)
 class CONSTANTS:
     Colors = [ [1., 0., 0.], [1., 1., 0.],  [0., 1., 0.] ]
     AxisNames = ['x', 'y', 'z']
+    OutlinePropertyNames = ['XSlices', 'YSlices', 'ZSlices']
 
 from vtkmodules.vtkRenderingCore import vtkTextActor
 
@@ -41,17 +42,16 @@ class ScaleActor(vtkTextActor):
 
 class UIBuilder:
 
-    def toggle_callback(view, var, value):
+    def toggle_callback(self, view, var, value):
         view._state[var] = value
         view.update_client_state()
 
-    @staticmethod
-    def toggle_button(view, var, on_icon, off_icon, on_text, off_text, **kwargs):
+    def toggle_button(self, view, var, on_icon, off_icon, on_text, off_text, **kwargs):
         if 'click' in kwargs:
             callback = kwargs['click']
             click_callback = lambda _: callback()
         else:
-            click_callback = lambda value: UIBuilder.toggle_callback(view, var, value)
+            click_callback = lambda value: self.toggle_callback(view, var, value)
 
         with vuetify.VTooltip(left=True, v_if=f'{view.id}_{var}'):
             with vuetify.Template(v_slot_activator="{on, attrs}"):
@@ -72,8 +72,7 @@ class UIBuilder:
                     __properties=[("v_bind", "v-bind"), ("v_on", "v-on")])
             html.Pre(off_text)
 
-    @staticmethod
-    def maximize_button(view, i, j):
+    def maximize_button(self, view, i, j):
         with vuetify.VTooltip(left=True, v_if=f'{view.id}_no_maximized'):
             with vuetify.Template(v_slot_activator="{on, attrs}"):
                 vuetify.VIcon("mdi-border-all",
@@ -93,14 +92,19 @@ class UIBuilder:
                     __properties=[("v_bind", "v-bind"), ("v_on", "v-on")])
             html.Pre("Restore")
 
+    def slice_slider(self, view, axis):
+        vuetify.VSlider(dense=True, hide_details=True,
+            min=(f'{view.id}_slice_min_{axis}', 0), max=(f'{view.id}_slice_max_{axis}', 0),
+            v_model=(f'{view.id}_slice_{axis}', 0))
 
 class Quad(Base):
     """A quad view that renders the dataset in four views."""
     def __init__(self, filename, opts, **kwargs) -> None:
         super().__init__(filename, opts)
+        self._ui_builder = kwargs.get('ui_builder', UIBuilder())
         self._views = [None, None, None, None]
         self._html_views = [None, None, None, None]
-        self._outlines = [None, None, None]
+        self._outline = None
         self._slices = [None, None, None]
         self._outer_slices = [None] * 6
         self._active_subsampling_factor = self.subsampling_factor
@@ -126,6 +130,10 @@ class Quad(Base):
 
         # load the color categories, if present
         self.load_categories()
+
+    @property
+    def state(self):
+        return self._state
 
     def update_client_state(self):
         """updates the client with the current state."""
@@ -309,15 +317,13 @@ class Quad(Base):
 
             with vuetify.VRow(v_if=f'{self._id}_no_maximized || {self.id}_max_row == 0', no_gutters=True, classes="shrink"):
                 with vuetify.VCol(v_if=f'{self._id}_no_maximized || {self.id}_max_col == 0'):
-                    vuetify.VSlider(dense=True, hide_details=True,
-                        min=(f'{self.id}_slice_min_0', 0), max=(f'{self.id}_slice_max_0', 0), v_model=(f'{self.id}_slice_0', 0))
+                    self._ui_builder.slice_slider(self, 0)
                 with vuetify.VCol(v_if=f'{self._id}_no_maximized || {self.id}_max_col == 0', cols="auto"):
-                    UIBuilder.maximize_button(self, 0, 0)
+                    self._ui_builder.maximize_button(self, 0, 0)
                 with vuetify.VCol(v_if=f'{self._id}_no_maximized || {self.id}_max_col == 1'):
-                    vuetify.VSlider(dense=True, hide_details=True,
-                        min=(f'{self.id}_slice_min_1', 0), max=(f'{self.id}_slice_max_1', 0), v_model=(f'{self.id}_slice_1', 0))
+                    self._ui_builder.slice_slider(self, 1)
                 with vuetify.VCol(v_if=f'{self._id}_no_maximized || {self.id}_max_col == 1', cols="auto"):
-                    UIBuilder.maximize_button(self, 0, 1)
+                    self._ui_builder.maximize_button(self, 0, 1)
 
             with vuetify.VRow(v_if=f'{self._id}_no_maximized || {self.id}_max_row == 1', no_gutters=True, classes="grow"):
                 with vuetify.VCol(v_if=f'{self._id}_no_maximized || {self.id}_max_col == 0'):
@@ -331,23 +337,22 @@ class Quad(Base):
 
             with vuetify.VRow(v_if=f'{self._id}_no_maximized || {self.id}_max_row == 1', no_gutters=True, classes="shrink"):
                 with vuetify.VCol(v_if=f'{self._id}_no_maximized || {self.id}_max_col == 0'):
-                    vuetify.VSlider(dense=True, hide_details=True,
-                        min=(f'{self.id}_slice_min_2', 0), max=(f'{self.id}_slice_max_2', 0), v_model=(f'{self.id}_slice_2', 0))
+                    self._ui_builder.slice_slider(self, 2)
                 with vuetify.VCol(v_if=f'{self._id}_no_maximized || {self.id}_max_col == 0', cols="auto"):
-                    UIBuilder.maximize_button(self, 1, 0)
+                    self._ui_builder.maximize_button(self, 1, 0)
                 with vuetify.VCol(v_if=f'{self._id}_no_maximized || {self.id}_max_col == 1'):
                     vuetify.VContainer(classes="fill-height")
                 with vuetify.VCol(v_if=f'{self._id}_no_maximized || {self.id}_max_col == 1', cols="auto"):
-                    UIBuilder.maximize_button(self, 1, 1)
+                    self._ui_builder.maximize_button(self, 1, 1)
 
         # add buttons to the button bar of the bottom of the view
         with self.layout.button_bar:
             if not self._force_outer_slices:
                 with vuetify.VCol(cols='auto'):
-                    UIBuilder.toggle_button(self, var='show_inner_slices', off_icon='mdi-border-outside', on_icon='mdi-border-inside',
+                    self._ui_builder.toggle_button(self, var='show_inner_slices', off_icon='mdi-border-outside', on_icon='mdi-border-inside',
                       on_text='Show outer faces', off_text='Show inner slices')
             with vuetify.VCol(cols='auto'):
-                UIBuilder.toggle_button(self, var='full_res', on_icon='mdi-quality-high', off_icon='mdi-quality-low',
+                self._ui_builder.toggle_button(self, var='full_res', on_icon='mdi-quality-high', off_icon='mdi-quality-low',
                     off_text='Show full resolution', on_text='Show low resolution',
                     click=self.toggle_full_res)
             with vuetify.VCol(cols='auto'):
@@ -412,10 +417,10 @@ class Quad(Base):
         self._lut.RGBPoints = [0, 0.2, 0.2, 0.2, 1, 1, 1, 1]
 
         # create the pipeline
+        self.create_outline_pipelines()
         for axis in range(3):
             self.create_slice_pipeline(axis)
         self.create_3d_pipeline()
-        self.create_outline_pipelines()
         return True
 
     def reset_cameras(self):
@@ -460,10 +465,15 @@ class Quad(Base):
         def slice_changed(**kwargs):
             val = kwargs[f'{self.id}_slice_{axis}']
             self._state[f'slice_{axis}'] = self._slices[axis].VOI[axis*2] = self._slices[axis].VOI[axis*2+1] = val
+            setattr(self._outline, CONSTANTS.OutlinePropertyNames[axis], [val])
             text.Text = f'{CONSTANTS.AxisNames[axis]}: {self._active_subsampling_factor * val}'
             self.update_html_views()
             Base.propagate_changes_to_linked_views(self)
 
+        return {
+            'slice': slice,
+            'text': text
+        }
 
     def create_3d_pipeline(self):
         """Creates the 3D pipeline."""
@@ -530,15 +540,14 @@ class Quad(Base):
 
 
     def create_outline_pipelines(self):
-        for axis in range(3):
-            self._outlines[axis] = simple.Outline(Input=self._slices[axis])
-
+        """Creates the outline pipelines."""
+        self._outline = simple.ImageOutlineFilter(Input=self.producer)
         for view in self._views:
-            for axis in range(3):
-                outlineDisplay = simple.Show(self._outlines[axis], view)
-                outlineDisplay.SetRepresentationType('Outline')
-                outlineDisplay.AmbientColor = outlineDisplay.DiffuseColor = CONSTANTS.Colors[axis]
-                outlineDisplay.LineWidth = 2
+            outlineDisplay = simple.Show(self._outline, view)
+            outlineDisplay.SetRepresentationType('Wireframe')
+            outlineDisplay.MapScalars = 0
+            outlineDisplay.ColorArrayName = ['POINTS', 'colors']
+            outlineDisplay.LineWidth = 4
 
     def update_color_map(self):
         """Updates the color map."""
