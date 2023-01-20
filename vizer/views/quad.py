@@ -389,13 +389,12 @@ class Quad(Base):
         # update voi's for slices
         ext = self.producer.GetDataInformation().GetExtent()
         for axis in range(3):
-            for side in range(2):
-                voi = list(ext)
-                voi[axis*2] = voi[axis*2+1] = ext[axis*2+side]
-                self._outer_slices[axis*2+side].VOI = voi
             voi = list(ext)
             voi[axis*2] = voi[axis*2+1] = self._state[f'slice_{axis}']
             self._slices[axis].VOI = voi
+
+        # update voi's for outer slices
+        self.update_outer_slices(ext)
 
         # reset cameras
         if newly_created:
@@ -403,6 +402,13 @@ class Quad(Base):
 
         self.update_client_state()
         self.update_html_views()
+
+    def update_outer_slices(self, ext):
+        for axis in range(3):
+            for side in range(2):
+                voi = list(ext)
+                voi[axis*2] = voi[axis*2+1] = ext[axis*2+side]
+                self._outer_slices[axis*2+side].VOI = voi
 
     def create_pipeline(self):
         if hasattr(self, '_created_pipeline'):
