@@ -33,6 +33,7 @@ RUN python3.9 -m venv env
 
 COPY pyproject.toml /opt/vizer/
 COPY server.py /opt/vizer/
+COPY reader.py /opt/vizer/
 COPY vizer /opt/vizer/vizer/
 
 WORKDIR /opt/vizer
