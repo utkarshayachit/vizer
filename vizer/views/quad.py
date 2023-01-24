@@ -446,7 +446,7 @@ class Quad(Base):
         log.info(f'{self.id}: creating slice pipeline for axis {axis} with extent {ext}')
 
         # create the slice
-        slice = simple.ExtractSubset(Input=self.producer, VOI=ext)
+        slice = simple.ExtractVOI(Input=self.producer, VOI=ext)
         self._slices[axis] = slice
 
         # set the slice to the middle of the axis
@@ -503,7 +503,7 @@ class Quad(Base):
         ext = self.producer.GetDataInformation().GetExtent()
         for axis in range(3):
             for side in range(2):
-                voi = simple.ExtractSubset(Input=self.producer, VOI=ext)
+                voi = simple.ExtractVOI(Input=self.producer, VOI=ext)
                 voi.VOI[axis*2] = voi.VOI[axis*2+1] = ext[axis*2+side]
                 slice_display = simple.Show(voi, view)
                 simple.ColorBy(slice_display, ('POINTS', 'ImageFile'))
