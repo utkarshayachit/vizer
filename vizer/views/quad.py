@@ -135,6 +135,12 @@ class Quad(Base):
     def state(self):
         return self._state
 
+    def get_scalar_name(self):
+        """returns the scalar array name"""
+        scalars = self.producer.GetDataInformation().GetPointDataInformation().GetAttributeInformation(
+            vtk.vtkDataSetAttributes.SCALARS)
+        return scalars.GetName()
+
     def update_client_state(self):
         """updates the client with the current state."""
         state = get_server().state
@@ -454,7 +460,7 @@ class Quad(Base):
 
         # create the slice representation
         sliceDisplay = simple.Show(slice, self._views[axis])
-        simple.ColorBy(sliceDisplay, ('POINTS', 'ImageFile'))
+        simple.ColorBy(sliceDisplay, ('POINTS', self.get_scalar_name()))
         sliceDisplay.SetRepresentationType('Slice')
         sliceDisplay.LookupTable = self._lut
 
@@ -486,7 +492,7 @@ class Quad(Base):
         log.info(f'{self.id}: creating 3d pipeline')
         view = self._views[3]
         outline_display = simple.Show(self.producer, view)
-        simple.ColorBy(outline_display, ('POINTS', 'ImageFile'))
+        simple.ColorBy(outline_display, ('POINTS', self.get_scalar_name()))
         outline_display.SetRepresentationType('Outline')
         outline_display.LookupTable = self._lut
 
@@ -494,7 +500,7 @@ class Quad(Base):
         slice_displays = [None] * 3
         for axis in range(3):
             slice_display  = simple.Show(self._slices[axis], view)
-            simple.ColorBy(slice_display, ('POINTS', 'ImageFile'))
+            simple.ColorBy(slice_display, ('POINTS', self.get_scalar_name()))
             slice_display.SetRepresentationType('Slice')
             slice_display.LookupTable = self._lut
             slice_displays[axis] = slice_display
@@ -506,7 +512,7 @@ class Quad(Base):
                 voi = simple.ExtractVOI(Input=self.producer, VOI=ext)
                 voi.VOI[axis*2] = voi.VOI[axis*2+1] = ext[axis*2+side]
                 slice_display = simple.Show(voi, view)
-                simple.ColorBy(slice_display, ('POINTS', 'ImageFile'))
+                simple.ColorBy(slice_display, ('POINTS', self.get_scalar_name()))
                 slice_display.SetRepresentationType('Slice')
                 slice_display.LookupTable = self._lut
                 simple.Hide(voi, view)
@@ -569,7 +575,7 @@ class Quad(Base):
             count = min(11, max(3, len(self._categories)))
             self._lut.ApplyPreset(f'Brewer Diverging Spectral ({count})', True)
         else:
-            drange = self.producer.GetDataInformation().GetArrayInformation('ImageFile', vtk.vtkDataObject.FIELD_ASSOCIATION_POINTS).GetComponentRange(0)
+            drange = self.producer.GetDataInformation().GetArrayInformation(self.get_scalar_name(), vtk.vtkDataObject.FIELD_ASSOCIATION_POINTS).GetComponentRange(0)
             log.info(f'{self.id}: range: {drange}')
             self._lut.InterpretValuesAsCategories = False
             self._lut.RescaleTransferFunction(drange[0], drange[1])
