@@ -1,0 +1,22 @@
+# Build a docker image with the  glvnd support.
+ARG BASE=ubuntu:20.04
+FROM ${BASE}
+
+ARG PARAVIEW_PACKAGE_DIR=v5.10
+ARG PARAVIEW_PACKAGE_NAME=ParaView-5.10.1-osmesa-MPI-Linux-Python3.9-x86_64.tar.gz
+
+# ------------------------------------------------------
+# copy source code
+COPY pyproject.toml /opt/vizer/
+COPY server.py /opt/vizer/
+COPY reader.py /opt/vizer/
+COPY vizer /opt/vizer/vizer/
+
+# ------------------------------------------------------
+COPY docker /opt/scripts
+RUN /opt/scripts/prepare.sh
+
+# ------------------------------------------------------
+# run vizer
+WORKDIR /opt/paraview
+ENTRYPOINT ["/opt/scripts/entrypoint.sh" ]
