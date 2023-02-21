@@ -155,7 +155,7 @@ class Base(ABC):
         log.info(f'{self.id}: loading dataset for {self.filename}')
         self.set_status('loading dataset ...')
         awaitable = async_only
-        if not async_only:
+        if not async_only or not self.meta.is_raw():
             dataset, awaitable = self.meta.sync_read_dataset(self.opts)
             self.set_dataset(dataset)
             del dataset # release reference

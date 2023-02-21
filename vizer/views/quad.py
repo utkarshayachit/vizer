@@ -26,8 +26,14 @@ class ScaleActor(vtkTextActor):
         self._setup()
 
     def update_scale(self, scale):
-        q = self._config.spacing
-        self.SetInput(f'scale: 1 px = {q.scale(scale):#.2q}')
+        if self._config:
+            q = self._config.spacing
+            self.SetInput(f'scale: 1 px = {q.scale(scale):#.2q}')
+            self.SetVisibility(True)
+        else:
+            # nothing to do since we don't have any scale information
+            self.SetInput(' ')
+            self.SetVisibility(False)
 
     def _setup(self):
         self.SetInput('[missing update]')
