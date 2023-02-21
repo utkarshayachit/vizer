@@ -1,6 +1,7 @@
 # Build a docker image with the  glvnd support.
 ARG BASE=ubuntu:20.04
 FROM ${BASE}
+EXPOSE 8080
 
 ARG PARAVIEW_PACKAGE_DIR=v5.10
 ARG PARAVIEW_PACKAGE_NAME=ParaView-5.10.1-osmesa-MPI-Linux-Python3.9-x86_64.tar.gz

@@ -1,6 +1,7 @@
 # Build a docker image with the  glvnd support.
 ARG BASE=nvidia/opengl:1.2-glvnd-devel-ubuntu20.04
 FROM ${BASE}
+EXPOSE 8080
 
 # ------------------------------------------------------
 ARG PARAVIEW_PACKAGE_DIR=v5.10
