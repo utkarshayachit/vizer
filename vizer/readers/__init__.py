@@ -1,7 +1,9 @@
 from os import path, cpu_count
 from vizer import utils
+import ast
 import re
 import asyncio
+import json
 import numpy
 from quantiphy import Quantity
 
@@ -20,8 +22,16 @@ class RawConfig:
         self.unsigned = False
         self.spacing = None
 
+        # this is a list of text annotation to be added to the view
+        self.annotations = []
+
+        # this color map annotations / categories
+        self.categories = {}
+        self.labels = {}
+
+
     def __str__(self) -> str:
-        return f'bits: {self.bits}, unsigned: {self.unsigned}, dims: {self.dims}, spacing: {self.spacing:q} ({self.spacing.real})'
+        return ', '.join([f'{k}: {v}' for k, v in vars(self).items()])
 
     def is_valid(self) -> bool:
         return self.dims[0] * self.dims[1] * self.dims[2] > 0 and self.bits > 0
@@ -59,6 +69,13 @@ class RawConfig:
     @staticmethod
     def extract_config(filename):
         """extracts metadata from the file's name"""
+        # see if there's a json file with the same name, if so we use that to extract metadata
+        json_file = path.splitext(filename)[0] + '.json'
+        if path.isfile(json_file):
+            return RawConfig.extract_config_from_json(json_file, filename)
+
+        # extract metadata from filename
+        log.info(f'extracting metadata from filename: {filename}')
         reg = re.compile(r"_(?P<bits>\d+)b(?P<unsigned>u?)_?.*_(?P<xdim>\d+)x(?P<ydim>\d+)x(?P<zdim>\d+)")
         m = reg.search(filename)
         if not m:
@@ -86,6 +103,53 @@ class RawConfig:
                 num =  group.get('spacing1', '0') + '.' + group.get("spacing2", '0')
                 unit = group.get('unit', 'm')
                 config.spacing = Quantity(f"{num} {unit}")
+        return config if config.is_valid() else None
+
+    @staticmethod
+    def extract_config_from_json(filename, raw_filename):
+        log.info(f'extracting metadata from json file: {filename}')
+
+        json_data = json.load(open(filename))
+        volume_data = json_data.get('volumes', [{}])[0]
+        volume_filename = volume_data.get('volume_filename', None)
+        volume_metadata = volume_data.get('volume_metadata', {})
+
+        config = RawConfig()
+        config.dims[0] = int(volume_metadata.get('xdim', 0))
+        config.dims[1] = int(volume_metadata.get('ydim', 0))
+        config.dims[2] = int(volume_metadata.get('zdim', 0))
+        config.spacing = Quantity(str(volume_metadata.get('voxel', 1.0)) + 'um')
+
+        bitrate = volume_metadata.get('bitrate', 0)
+        if (m := re.search(r'^(?P<bits>\d+)b(?P<unsigned>u?)$', bitrate)) is not None:
+            groups = m.groupdict()
+            config.bits = int(groups.get('bits', 0))
+            config.unsigned = True if 'unsigned' in groups else False
+        else:
+            log.error(f'could not parse bitrate "{bitrate}"')
+            return None
+
+        config.annotations.append(f'filename: {volume_filename}')
+        config.annotations.append(f'dims: {"x".join([str(x) for x in config.dims])}')
+        config.annotations.append(f'bitrate: {bitrate}')
+        if 'type' in volume_metadata:
+            config.annotations.append(f'type: {volume_metadata["type"]}')
+
+        # process phase_metadata
+        if (phase_metadata := volume_data.get('phase_metadata', None)) is not None:
+            phases = phase_metadata.get('phases', [])
+            if type(phases) is not list:
+                phases = ast.literal_eval(phases)
+            rgba_array = phase_metadata.get('rgba_array', [])
+            if type(rgba_array) is not list:
+                rgba_array = ast.literal_eval(rgba_array)
+            if len(phases) != len(rgba_array):
+                log.error(f'phases and rgba_array do not have the same length')
+            else:
+                for phase, rgba in zip(phases, rgba_array):
+                    config.categories.update({phase: rgba})
+
+        log.info(f'extracted metadata: {config}')
         return config if config.is_valid() else None
 
 

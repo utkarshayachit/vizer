@@ -214,7 +214,7 @@ class Quad(Base):
     def load_categories(self):
         """Loads the color categories from meta data file associated with the dataset."""
         self._categories = {}
-        self._annotations = []
+        self._annotations = self.meta.raw_config.annotations if self.meta.raw_config is not None else []
         meta_filename = f'{os.path.splitext(self.meta.filename)[0]}.txt'
 
         if not os.path.exists(meta_filename):
@@ -570,6 +570,11 @@ class Quad(Base):
     def update_color_map(self):
         """Updates the color map."""
         log.info(f'{self.id}: updating color map')
+
+        # get scalar bar in 3D view
+        sb = simple.GetScalarBar(self._lut, self._views[3])
+        sb.ComponentTitle = ''
+
         if self._categories:
             self._lut.InterpretValuesAsCategories = True
             self._lut.AnnotationsInitialized = True
@@ -580,15 +585,28 @@ class Quad(Base):
             self._lut.Annotations = annotations
             count = min(11, max(3, len(self._categories)))
             self._lut.ApplyPreset(f'Brewer Diverging Spectral ({count})', True)
+
+            # update scalar bar
+            sb.Visibility = True
+            sb.Title = 'segments'
+        elif self.meta.raw_config is not None and self.meta.raw_config.categories:
+            self._lut.InterpretValuesAsCategories = True
+            self._lut.AnnotationsInitialized = True
+            annotations = []
+            colors=[]
+            for value, color in self.meta.raw_config.categories.items():
+                annotations.append(str(value))
+                annotations.append(str(value))
+                colors.extend(color)
+            self._lut.Annotations = annotations
+            self._lut.IndexedColors = colors
+
+            # update scalar bar
+            sb.Visibility = False
         else:
             drange = self.producer.GetDataInformation().GetArrayInformation(self.get_scalar_name(), vtk.vtkDataObject.FIELD_ASSOCIATION_POINTS).GetComponentRange(0)
             log.info(f'{self.id}: range: {drange}')
             self._lut.InterpretValuesAsCategories = False
             self._lut.RescaleTransferFunction(drange[0], drange[1])
-
-
-        # show scalar bar in 3D view
-        sb = simple.GetScalarBar(self._lut, self._views[3])
-        sb.Visibility = True
-        sb.Title = 'segments' if self._categories else ''
-        sb.ComponentTitle = ''
+            sb.Visibility = True
+            sb.Title = ''
