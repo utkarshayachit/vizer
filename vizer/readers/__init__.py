@@ -55,6 +55,10 @@ class RawConfig:
     @property
     def vtk_spacing(self):
         return [1.0, 1.0, 1.0]
+    
+    @property
+    def vtk_origin(self):
+        return [0.0, 0.0, 0.0]
 
     @property
     def dtype(self):
