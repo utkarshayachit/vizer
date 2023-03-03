@@ -1,6 +1,7 @@
 r"""quad view"""
 
-from .base import Base
+from .base import Base, Layout
+from .segmentation import Segmentation
 from vizer import utils
 from vizer.readers import RawConfig
 import os.path
@@ -99,15 +100,29 @@ class UIBuilder:
                     __properties=[("v_bind", "v-bind"), ("v_on", "v-on")])
             html.Pre("Restore")
 
+    def select_button(self, view, axis):
+        if view._segmentation_view is None:
+            return
+        with vuetify.VTooltip(left=True):
+            with vuetify.Template(v_slot_activator="{on, attrs}"):
+                vuetify.VIcon("mdi-select-drag",
+                    click=lambda **_: view.show_segmentation_dialog(axis),
+                    classes="mr-4",
+                    v_bind="attrs",
+                    v_on="on",
+                    __properties=[("v_bind", "v-bind"), ("v_on", "v-on")])
+            html.Pre("Select Regions")
+
     def slice_slider(self, view, axis):
         vuetify.VSlider(dense=True, hide_details=True,
             min=(f'{view.id}_slice_min_{axis}', 0), max=(f'{view.id}_slice_max_{axis}', 0),
             v_model=(f'{view.id}_slice_{axis}', 0))
 
+
 class Quad(Base):
     """A quad view that renders the dataset in four views."""
-    def __init__(self, filename, opts, **kwargs) -> None:
-        super().__init__(filename, opts)
+    def __init__(self, meta, opts, **kwargs) -> None:
+        super().__init__(meta, opts)
         self._ui_builder = kwargs.get('ui_builder', UIBuilder())
         self._views = [None, None, None, None]
         self._html_views = [None, None, None, None]
@@ -135,15 +150,11 @@ class Quad(Base):
         self._state['no_maximized'] = True
         self._block_update = False
 
+        self._segmentation_view = Segmentation(meta, opts, parent=self) if opts.segmentation else None
+
     @property
     def state(self):
         return self._state
-
-    def get_scalar_name(self):
-        """returns the scalar array name"""
-        scalars = self.producer.GetDataInformation().GetPointDataInformation().GetAttributeInformation(
-            vtk.vtkDataSetAttributes.SCALARS)
-        return scalars.GetName()
 
     def update_client_state(self):
         """updates the client with the current state."""
@@ -239,6 +250,17 @@ class Quad(Base):
         self.update_client_state()
         Base.propagate_changes_to_linked_views(self)
 
+    def show_segmentation_dialog(self, axis):
+        """toggles the segmentation visibility."""
+        assert self._segmentation_view is not None
+        # update slice
+        self._segmentation_view.setup(\
+            axis=axis,
+            slice=self._state[f'slice_{axis}'],
+            subsampling_factor=self._active_subsampling_factor,
+            dataset=self._slices[axis].GetClientSideObject().GetOutputDataObject(0))
+        self.layout.show_dialog()
+
     def create_slice_view(self, axis:int):
         """Creates a slice view for the given axis."""
         view = self.create_render_view()
@@ -304,9 +326,13 @@ class Quad(Base):
                 with vuetify.VCol(v_if=f'{self._id}_no_maximized || {self.id}_max_col == 0'):
                     self._ui_builder.slice_slider(self, 0)
                 with vuetify.VCol(v_if=f'{self._id}_no_maximized || {self.id}_max_col == 0', cols="auto"):
+                    self._ui_builder.select_button(self, axis=0)
+                with vuetify.VCol(v_if=f'{self._id}_no_maximized || {self.id}_max_col == 0', cols="auto"):
                     self._ui_builder.maximize_button(self, 0, 0)
                 with vuetify.VCol(v_if=f'{self._id}_no_maximized || {self.id}_max_col == 1'):
                     self._ui_builder.slice_slider(self, 1)
+                with vuetify.VCol(v_if=f'{self._id}_no_maximized || {self.id}_max_col == 1', cols="auto"):
+                    self._ui_builder.select_button(self, axis=1)
                 with vuetify.VCol(v_if=f'{self._id}_no_maximized || {self.id}_max_col == 1', cols="auto"):
                     self._ui_builder.maximize_button(self, 0, 1)
 
@@ -323,6 +349,8 @@ class Quad(Base):
             with vuetify.VRow(v_if=f'{self._id}_no_maximized || {self.id}_max_row == 1', no_gutters=True, classes="shrink"):
                 with vuetify.VCol(v_if=f'{self._id}_no_maximized || {self.id}_max_col == 0'):
                     self._ui_builder.slice_slider(self, 2)
+                with vuetify.VCol(v_if=f'{self._id}_no_maximized || {self.id}_max_col == 0', cols="auto"):
+                    self._ui_builder.select_button(self, axis=2)
                 with vuetify.VCol(v_if=f'{self._id}_no_maximized || {self.id}_max_col == 0', cols="auto"):
                     self._ui_builder.maximize_button(self, 1, 0)
                 with vuetify.VCol(v_if=f'{self._id}_no_maximized || {self.id}_max_col == 1'):
@@ -350,6 +378,11 @@ class Quad(Base):
                         v_on="on",
                         __properties=[("v_bind", "v-bind"), ("v_on", "v-on")])
                     html.Pre("Reset zoom for all views")
+
+        # setup popup dialog for selecting regions
+        if self._segmentation_view is not None:
+            with self.layout.dialog:
+                self._segmentation_view.widget
 
     def update_pipeline(self):
         # update domains based on current dataset.

@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
 from paraview import simple, vtk
-from trame.widgets import vuetify, paraview
+from trame.widgets import vuetify, paraview, html
 from trame.app import get_server
 
 from vizer import utils
@@ -12,17 +12,27 @@ import weakref
 log = utils.get_logger(__name__)
 
 class Layout(vuetify.VCard):
-    def __init__(self, title=None):
+    def __init__(self, title=None, close=None):
         super().__init__(dark=True,
             rounded='lg',
             outlined=True,
-            classes="grow d-flex flex-column flex-nowrap pa-0 mx-0",
+            classes="grow d-flex flex-column flex-nowrap pa-0 ma-0",
             style="overflow: hidden")
 
         with self:
             with vuetify.VRow(no_gutters=True, classes="shrink grey"):
                 with vuetify.VCol():
-                    vuetify.VSystemBar(title, dense=True, classes="grey ma-0 px-2 py-0", style="text-overflow: ellipsis; overflow: hidden; white-space: nowrap;")
+                    with vuetify.VSystemBar(title, dense=True, classes="grey ma-0 px-2 py-0", style="text-overflow: ellipsis; overflow: hidden; white-space: nowrap;"):
+                        if close is not None:
+                            vuetify.VSpacer()
+                            with vuetify.VTooltip(left=True):
+                                with vuetify.Template(v_slot_activator="{on, attrs}"):
+                                    vuetify.VIcon("mdi-close", click=close,
+                                                  v_bind="attrs",
+                                                  v_on="on",
+                                                  __properties=[('v_bind', 'v-bind'), ('v_on', 'on')])
+                                html.Pre("Close")
+
             with vuetify.VRow(no_gutters=True, classes="grow"):
                 self.viewport = vuetify.VCard(dark=True,
                     # remove the elevation
@@ -37,6 +47,7 @@ class Layout(vuetify.VCard):
                         dense=True, dark=True, disabled=True,
                         classes="ma-0 px-2 py-0")
                 vuetify.VSpacer()
+
             # this is used to show a busy indicator; a modal text dialog is popped up to avoid
             # any further interaction with the UI until the task is completed.
             with vuetify.VDialog(v_model=(f'busy_{id(self)}', False), max_width="150", persistent=True):
@@ -44,6 +55,9 @@ class Layout(vuetify.VCard):
                     with vuetify.VCardText(classes="pa-5"):
                         with vuetify.VRow():
                             vuetify.VCol("updating ...")
+
+            # this is used to show a modal dialog with arbitrary content
+            self.dialog = vuetify.VDialog(v_model=(f'modal_{id(self)}', False), fullscreen=True)
 
         self.set_status('initializing ...')
 
@@ -60,6 +74,16 @@ class Layout(vuetify.VCard):
     def stop_busy(self):
         state = get_server().state
         state[f'busy_{id(self)}'] = False
+        state.flush()
+
+    def show_dialog(self):
+        state = get_server().state
+        state[f'modal_{id(self)}'] = True
+        state.flush()
+
+    def hide_dialog(self):
+        state = get_server().state
+        state[f'modal_{id(self)}'] = False
         state.flush()
 
 class Base(ABC):
@@ -147,6 +171,11 @@ class Base(ABC):
         return self._producer
 
     @property
+    def dataset(self):
+        """returns the dataset associated with this view."""
+        return self.producer.GetClientSideObject().GetOutputDataObject(0)
+
+    @property
     def subsampling_factor(self):
         return max(self._opts.subsampling_factor, 1)
 
@@ -225,3 +254,9 @@ class Base(ABC):
             subsampler.Update()
             dataset = subsampler.GetOutputDataObject(0)
         return dataset
+
+    def get_scalar_name(self):
+        """returns the scalar array name"""
+        scalars = self.producer.GetDataInformation().GetPointDataInformation().GetAttributeInformation(
+            vtk.vtkDataSetAttributes.SCALARS)
+        return scalars.GetName() if scalars is not None else None
