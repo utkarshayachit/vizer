@@ -9,6 +9,7 @@ import asyncio
 from paraview.simple import LoadPlugins
 LoadPlugins(os.path.join(os.path.dirname(__file__), 'plugins', 'outline_filter.py'))
 LoadPlugins(os.path.join(os.path.dirname(__file__), 'plugins', 'extract_voi.py'))
+LoadPlugins(os.path.join(os.path.dirname(__file__), 'plugins', 'color_mappyer.py'))
 
 from . import utils, views, readers
 log = utils.get_logger(__name__)

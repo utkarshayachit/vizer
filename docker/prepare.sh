@@ -14,7 +14,11 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
       libglapi-mesa \
       libgomp1 \
       libcurl4 \
-      wget
+      wget \
+      git \
+      build-essential \
+      pybind11-dev \
+      python3.9-dev
 rm -rf /var/lib/apt/lists/*
 
 # Set python3 to python3.9 (otherwise, it will be python3.8)
