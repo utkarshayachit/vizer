@@ -25,10 +25,8 @@ class RawConfig:
         # this is a list of text annotation to be added to the view
         self.annotations = []
 
-        # this color map annotations / categories
-        self.categories = {}
-        self.labels = {}
-
+        # this is categorical colormap to be used for mapping scalars
+        self.colormap = None
 
     def __str__(self) -> str:
         return ', '.join([f'{k}: {v}' for k, v in vars(self).items()])
@@ -140,16 +138,23 @@ class RawConfig:
             phases = phase_metadata.get('phases', [])
             if type(phases) is not list:
                 phases = ast.literal_eval(phases)
+            phases = numpy.array(phases, dtype=config.dtype)
             rgba_array = phase_metadata.get('rgba_array', [])
             if type(rgba_array) is not list:
                 rgba_array = ast.literal_eval(rgba_array)
+            rgba_array = numpy.array(rgba_array, dtype=numpy.float32)
             if len(phases) != len(rgba_array):
                 log.error(f'phases and rgba_array do not have the same length')
             else:
-                for phase, rgba in zip(phases, rgba_array):
-                    config.categories.update({phase: rgba})
+                assert rgba_array.shape[1] == 4
+                assert rgba_array.shape[0] == len(phases)
 
-        log.info(f'extracted metadata: {config}')
+                dtype = numpy.dtype([('scalar', config.dtype), ('color', numpy.float32, (4,))])
+                config.colormap = numpy.empty(len(phases), dtype=dtype)
+                config.colormap['scalar'] = phases
+                config.colormap['color'] = rgba_array
+
+        # log.info(f'extracted metadata: {config}')
         return config if config.is_valid() else None
 
 

@@ -23,3 +23,7 @@ export  PIP_NO_CACHE_DIR=1
 # install python packages
 pip install --upgrade pip
 pip install -e .
+
+# install color_mapyer package
+# this is needed for accelerated categorical colormapping
+pip install git+https://github.com/utkarshayachit/color_mappyer.git

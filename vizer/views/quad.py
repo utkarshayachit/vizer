@@ -5,6 +5,7 @@ from vizer import utils
 from vizer.readers import RawConfig
 import os.path
 import re
+import numpy
 
 from paraview import simple, vtk
 from trame.widgets import vuetify, paraview, html
@@ -216,9 +217,11 @@ class Quad(Base):
         self._categories = {}
         self._annotations = self.meta.raw_config.annotations if self.meta.raw_config is not None else []
         meta_filename = f'{os.path.splitext(self.meta.filename)[0]}.txt'
-
         if not os.path.exists(meta_filename):
             return
+
+        # this is for old text files; this can be removed once we've confirmed that
+        # json files are the only ones we need to support for metadata
         with open(meta_filename, 'r') as f:
             for line in f.readlines():
                 line = line.strip()
@@ -435,6 +438,7 @@ class Quad(Base):
         self._lut.RGBPoints = [0, 0.2, 0.2, 0.2, 1, 1, 1, 1]
 
         # create the pipeline
+        self._color_mapyer = simple.ColorMappyer(Input=self.producer)
         self.create_outline_pipelines()
         for axis in range(3):
             self.create_slice_pipeline(axis)
@@ -458,7 +462,7 @@ class Quad(Base):
         log.info(f'{self.id}: creating slice pipeline for axis {axis} with extent {ext}')
 
         # create the slice
-        slice = simple.ExtractVOI(Input=self.producer, VOI=ext)
+        slice = simple.ExtractVOI(Input=self._color_mapyer, VOI=ext)
         self._slices[axis] = slice
 
         # set the slice to the middle of the axis
@@ -469,6 +473,7 @@ class Quad(Base):
         simple.ColorBy(sliceDisplay, ('POINTS', self.get_scalar_name()))
         sliceDisplay.SetRepresentationType('Slice')
         sliceDisplay.LookupTable = self._lut
+        sliceDisplay.MapScalars = self.get_map_scalars()
 
         # add annotation text
         text = simple.Text()
@@ -509,18 +514,20 @@ class Quad(Base):
             simple.ColorBy(slice_display, ('POINTS', self.get_scalar_name()))
             slice_display.SetRepresentationType('Slice')
             slice_display.LookupTable = self._lut
+            slice_display.MapScalars = self.get_map_scalars()
             slice_displays[axis] = slice_display
 
         # create 6 outer slice displays
         ext = self.producer.GetDataInformation().GetExtent()
         for axis in range(3):
             for side in range(2):
-                voi = simple.ExtractVOI(Input=self.producer, VOI=ext)
+                voi = simple.ExtractVOI(Input=self._color_mapyer, VOI=ext)
                 voi.VOI[axis*2] = voi.VOI[axis*2+1] = ext[axis*2+side]
                 slice_display = simple.Show(voi, view)
                 simple.ColorBy(slice_display, ('POINTS', self.get_scalar_name()))
                 slice_display.SetRepresentationType('Slice')
                 slice_display.LookupTable = self._lut
+                slice_display.MapScalars = self.get_map_scalars()
                 simple.Hide(voi, view)
                 self._outer_slices[axis*2+side] = voi
         self._update_3d_slice_visibility()
@@ -563,9 +570,17 @@ class Quad(Base):
         for view in self._views:
             outlineDisplay = simple.Show(self._outline, view)
             outlineDisplay.SetRepresentationType('Wireframe')
-            outlineDisplay.MapScalars = 0
+            outlineDisplay.MapScalars = self.get_map_scalars()
             outlineDisplay.ColorArrayName = ['POINTS', 'colors']
             outlineDisplay.LineWidth = 4
+
+    def get_map_scalars(self):
+        """Returns the map scalars value through LUT or not."""
+        if self.meta.raw_config is not None and self.meta.raw_config.colormap is not None:
+            return False
+        if self._categories:
+            return False
+        return True
 
     def update_color_map(self):
         """Updates the color map."""
@@ -576,37 +591,53 @@ class Quad(Base):
         sb.ComponentTitle = ''
 
         if self._categories:
+            log.info(f'{self.id}: using categorical color map for categories (legacy)')
             self._lut.InterpretValuesAsCategories = True
             self._lut.AnnotationsInitialized = True
             annotations = []
             for seg, label in self._categories.items():
                 annotations.append(str(seg))
                 annotations.append(label)
+
             self._lut.Annotations = annotations
             count = min(11, max(3, len(self._categories)))
             self._lut.ApplyPreset(f'Brewer Diverging Spectral ({count})', True)
 
+            colors = []
+            scalars = []
+            for seg in self._categories:
+                color = [0.0, 0.0, 0.0]
+                self._lut.GetClientSideObject().GetColor(seg, color)
+                colors.append([color[0], color[1], color[2], 1.0])
+                scalars.append(seg)
+
             # update scalar bar
             sb.Visibility = True
             sb.Title = 'segments'
-        elif self.meta.raw_config is not None and self.meta.raw_config.categories:
-            self._lut.InterpretValuesAsCategories = True
-            self._lut.AnnotationsInitialized = True
-            annotations = []
-            colors=[]
-            for value, color in self.meta.raw_config.categories.items():
-                annotations.append(str(value))
-                annotations.append(str(value))
-                colors.extend(color)
-            self._lut.Annotations = annotations
-            self._lut.IndexedColors = colors
-
-            # update scalar bar
+            # update color mapyer
+            # using this direct API call since the XML wrapping for this is broken
+            self._color_mapyer.GetClientSideObject().SetColors(numpy.array(colors).flatten())
+            self._color_mapyer.GetClientSideObject().SetScalars(scalars)
+            assert self.get_map_scalars() == False
+        elif self.meta.raw_config is not None and self.meta.raw_config.colormap is not None:
+            log.info(f'{self.id}: using categorical color map (with color_mappyer)')
+            self._lut.InterpretValuesAsCategories = False
+            self._lut.AnnotationsInitialized = False
             sb.Visibility = False
+
+            # update color mapyer
+            # using this direct API call since the XML wrapping for this is broken
+            self._color_mapyer.GetClientSideObject().SetColors(self.meta.raw_config.colormap['color'].flatten())
+            self._color_mapyer.GetClientSideObject().SetScalars(self.meta.raw_config.colormap['scalar'].flatten())
+            assert self.get_map_scalars() == False
         else:
             drange = self.producer.GetDataInformation().GetArrayInformation(self.get_scalar_name(), vtk.vtkDataObject.FIELD_ASSOCIATION_POINTS).GetComponentRange(0)
             log.info(f'{self.id}: range: {drange}')
             self._lut.InterpretValuesAsCategories = False
+            self._lut.ApplyPreset('Grayscale', True)
+            self._lut.RGBPoints = [0, 0.2, 0.2, 0.2, 1, 1, 1, 1]
             self._lut.RescaleTransferFunction(drange[0], drange[1])
             sb.Visibility = True
             sb.Title = ''
+            self._color_mapyer.Colors = []
+            self._color_mapyer.Scalars = []
