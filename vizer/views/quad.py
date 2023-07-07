@@ -570,7 +570,7 @@ class Quad(Base):
         for view in self._views:
             outlineDisplay = simple.Show(self._outline, view)
             outlineDisplay.SetRepresentationType('Wireframe')
-            outlineDisplay.MapScalars = self.get_map_scalars()
+            outlineDisplay.MapScalars = 0 # directly interpret scalars as colors
             outlineDisplay.ColorArrayName = ['POINTS', 'colors']
             outlineDisplay.LineWidth = 4
 
