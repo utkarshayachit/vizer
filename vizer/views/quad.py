@@ -483,12 +483,17 @@ class Quad(Base):
         textDisplay.FontSize = 16
         textDisplay.FontFamily = 'Arial'
 
+        # update outline actors
+        setattr(self._outline, CONSTANTS.OutlinePropertyNames[axis], [val])
+        self._outline.UpdateVTKObjects()
+
         state = get_server().state
         @state.change(f'{self.id}_slice_{axis}')
         def slice_changed(**kwargs):
             val = kwargs[f'{self.id}_slice_{axis}']
             self._state[f'slice_{axis}'] = self._slices[axis].VOI[axis*2] = self._slices[axis].VOI[axis*2+1] = val
             setattr(self._outline, CONSTANTS.OutlinePropertyNames[axis], [val])
+            self._outline.UpdateVTKObjects()
             text.Text = f'{CONSTANTS.AxisNames[axis]}: {self._active_subsampling_factor * val}'
             self.update_html_views()
             Base.propagate_changes_to_linked_views(self)
