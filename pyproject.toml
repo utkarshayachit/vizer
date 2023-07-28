@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Data Visualization Application"
 requires-python = ">=3.7"
 dependencies = [
-    "trame>=2.2",
+    "trame<3",
     "sympy>=1.11",
     "quantiphy==2.19",
 ]
