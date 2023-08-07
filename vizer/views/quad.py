@@ -135,9 +135,6 @@ class Quad(Base):
         self._state['no_maximized'] = True
         self._block_update = False
 
-        # load the color categories, if present
-        self.load_categories()
-
     @property
     def state(self):
         return self._state
@@ -177,7 +174,7 @@ class Quad(Base):
     @property
     def annotations_txt(self):
         """returns the annotations for this view."""
-        annotations = self._annotations[:]
+        annotations = list(self.meta.raw_config.annotations if self.meta.raw_config is not None else [])
         annotations.append(f'subsampling: {self._active_subsampling_factor}X')
         return '\n'.join(annotations)
 
@@ -211,33 +208,6 @@ class Quad(Base):
         """loads the full resolution dataset."""
         await self.load_dataset(async_only=True)
         self._block_update = False
-
-    def load_categories(self):
-        """Loads the color categories from meta data file associated with the dataset."""
-        self._categories = {}
-        self._annotations = self.meta.raw_config.annotations if self.meta.raw_config is not None else []
-        meta_filename = f'{os.path.splitext(self.meta.filename)[0]}.txt'
-        if not os.path.exists(meta_filename):
-            return
-
-        # this is for old text files; this can be removed once we've confirmed that
-        # json files are the only ones we need to support for metadata
-        with open(meta_filename, 'r') as f:
-            for line in f.readlines():
-                line = line.strip()
-                lline = line.lower()
-                if lline.startswith('segorder:'):
-                    lline = lline[len('segorder:'):]
-                    regex = r"(?:\s*(?P<value>\d+)-(?P<text>[^,]+),?)"
-                    matches = re.finditer(regex, lline)
-                    self._categories = dict([(int(m.group('value')), m.group('text')) for m in matches])
-                elif lline.startswith('samplename:'):
-                    line = 'sample name: ' + line[len('samplename:'):].strip()
-                    self._annotations.append(line)
-                elif lline.startswith('segmented'):
-                    line = 'segmented: ' + line[len('segmented'):].strip()
-                    self._annotations.append(line)
-        log.info(f'{self.id}: Loaded categories: {self._categories}')
 
     def _copy_slice_camera(self, view):
         """Links the interaction of the given axis to the other views."""
@@ -583,8 +553,6 @@ class Quad(Base):
         """Returns the map scalars value through LUT or not."""
         if self.meta.raw_config is not None and self.meta.raw_config.colormap is not None:
             return False
-        if self._categories:
-            return False
         return True
 
     def update_color_map(self):
@@ -595,39 +563,8 @@ class Quad(Base):
         sb = simple.GetScalarBar(self._lut, self._views[3])
         sb.ComponentTitle = ''
 
-        if self._categories:
-            log.info(f'{self.id}: using categorical color map for categories (legacy)')
-            self._lut.InterpretValuesAsCategories = True
-            self._lut.AnnotationsInitialized = True
-            annotations = []
-            for seg, label in self._categories.items():
-                annotations.append(str(seg))
-                annotations.append(label)
-
-            self._lut.Annotations = annotations
-            count = min(11, max(3, len(self._categories)))
-            self._lut.ApplyPreset(f'Brewer Diverging Spectral ({count})', True)
-
-            colors = []
-            scalars = []
-            for seg in self._categories:
-                color = [0.0, 0.0, 0.0]
-                self._lut.GetClientSideObject().GetColor(seg, color)
-                colors.append([color[0], color[1], color[2], 1.0])
-                scalars.append(seg)
-
-            # update scalar bar
-            sb.Visibility = True
-            sb.Title = 'segments'
-            # update color mapyer
-            # using this direct API call since the XML wrapping for this is broken
-            self._color_mapyer.GetClientSideObject().SetColors(numpy.array(colors).flatten())
-            self._color_mapyer.GetClientSideObject().SetScalars(scalars)
-            assert self.get_map_scalars() == False
-        elif self.meta.raw_config is not None and self.meta.raw_config.colormap is not None:
+        if self.meta.raw_config is not None and self.meta.raw_config.colormap is not None:
             log.info(f'{self.id}: using categorical color map (with color_mappyer)')
-            self._lut.InterpretValuesAsCategories = False
-            self._lut.AnnotationsInitialized = False
             sb.Visibility = False
 
             # update color mapyer

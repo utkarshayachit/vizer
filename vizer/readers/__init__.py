@@ -70,9 +70,16 @@ class RawConfig:
         # see if there's a json file with the same name, if so we use that to extract metadata
         json_file = path.splitext(filename)[0] + '.json'
         if path.isfile(json_file):
+            log.info(f'extracting metadata from json file: {json_file}')
             return RawConfig.extract_config_from_json(json_file, filename)
 
-        # extract metadata from filename
+        # next, try legacy txt file format
+        txt_file = path.splitext(filename)[0] + '.txt'
+        if path.isfile(txt_file):
+            log.info(f'extracting metadata from txt file: {txt_file}')
+            return RawConfig.extract_config_from_txt(txt_file, filename)
+
+        # extract metadata from filename itself
         log.info(f'extracting metadata from filename: {filename}')
         reg = re.compile(r"_(?P<bits>\d+)b(?P<unsigned>u?)_?.*_(?P<xdim>\d+)x(?P<ydim>\d+)x(?P<zdim>\d+)")
         m = reg.search(filename)
@@ -156,7 +163,68 @@ class RawConfig:
 
         # log.info(f'extracted metadata: {config}')
         return config if config.is_valid() else None
+    
+    @staticmethod
+    def extract_config_from_txt(filename, raw_filename):
+        config = RawConfig()
+        categories = None
+        with open(filename, 'r') as f:
+            for line in f.readlines():
+                if regex := re.search(r"^(?P<key>[^:]+):(?P<value>.*)$", line.strip()):
+                    groups = regex.groupdict()
+                    key = groups.get('key', '').strip().lower()
+                    value = groups.get('value', '').strip()
+                    if key == 'x-dimension':
+                        config.dims[0] = int(value)
+                    elif key == 'y-dimension':
+                        config.dims[1] = int(value)
+                    elif key == 'z-dimension':
+                        config.dims[2] = int(value)
+                    elif key == 'bitrate':
+                        if (m := re.search(r'^(?P<bits>\d+)b(?P<unsigned>u?)$', value)) is not None:
+                            groups = m.groupdict()
+                            config.bits = int(groups.get('bits', 0))
+                            config.unsigned = True if 'unsigned' in groups else False
+                        else:
+                            log.error(f'could not parse bitrate "{value}"')
+                            return None
+                    elif key == 'voxelsize(um)':
+                        config.spacing = Quantity(value + 'um')
+                    elif key == 'segorder':
+                        regex = r"(?:\s*(?P<value>\d+)-(?P<text>[^,]+),?)"
+                        matches = re.finditer(regex, value)
+                        categories = dict([(int(m.group('value')), m.group('text')) for m in matches])
+                    elif key == 'samplename':
+                        config.annotations.append(f'sample name: {value}')
+                    elif key == 'segmented':
+                        config.annotations.append(f'segmented: {value}')
+        if categories:
+            # build color map from categories
+            count = min(11, max(3, len(categories)))
+            preset = f'Brewer Diverging Spectral ({count})'
+            lut = simple.GetColorTransferFunction(f'temp_for_reader')
+            lut.InterpretValuesAsCategories = 1
+            annotations = []
+            for seg in categories:
+                annotations.append(str(seg))
+                annotations.append(str(seg))
+            lut.Annotations = annotations
+            lut.AnnotationsInitialized = 1
+            lut.ApplyPreset(preset, True)
 
+            colors = []
+            scalars = []
+            for seg in categories:
+                color = [0.0, 0.0, 0.0]
+                lut.GetClientSideObject().GetColor(seg, color)
+                colors.append([color[0], color[1], color[2], 1.0])
+                scalars.append(seg)
+
+            dtype = numpy.dtype([('scalar', config.dtype), ('color', numpy.float32, (4,))])
+            config.colormap = numpy.empty(len(categories), dtype=dtype)
+            config.colormap['scalar'] = numpy.array(scalars, dtype=config.dtype)
+            config.colormap['color'] = numpy.array(colors, dtype=numpy.float32)
+        return config if config.is_valid() else None
 
 class Metadata:
     """Metadata for a file."""
