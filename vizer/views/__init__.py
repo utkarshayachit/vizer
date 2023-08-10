@@ -12,7 +12,7 @@ def create(meta, opts):
     from .quad import Quad
     from .blank import Blank
     from .crop import Crop
-    from .segmentation import Segmentation
+    from .segmentation_v2 import Segmentation as SegmentationV2
 
     if opts.force_view == 'quad':
         return Quad(meta, opts)
@@ -23,8 +23,7 @@ def create(meta, opts):
     elif opts.force_view == 'crop':
         return Crop(meta, opts)
     elif opts.force_view == 'segmentation':
-        # not really supported
-        return Segmentation(meta, opts)
+        return SegmentationV2(meta, opts)
 
     if Quad.can_show(meta):
         return Quad(meta, opts)
