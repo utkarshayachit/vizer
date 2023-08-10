@@ -116,8 +116,6 @@ class RawConfig:
 
     @staticmethod
     def extract_config_from_json(filename, raw_filename):
-        log.info(f'extracting metadata from json file: {filename}')
-
         json_data = json.load(open(filename))
         volume_data = json_data.get('volumes', [{}])[0]
         volume_filename = volume_data.get('volume_filename', None)
