@@ -150,7 +150,8 @@ class Quad(Base):
         self._state['no_maximized'] = True
         self._block_update = False
 
-        self._segmentation_view = Segmentation(meta, opts, parent=self) if opts.segmentation else None
+        # self._segmentation_view = Segmentation(meta, opts, parent=self) if opts.segmentation else None
+        self._segmentation_view = None
 
     @property
     def state(self):
