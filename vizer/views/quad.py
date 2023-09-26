@@ -585,7 +585,7 @@ class Quad(Base):
             outlineDisplay.SetRepresentationType('Wireframe')
             outlineDisplay.MapScalars = 0 # directly interpret scalars as colors
             outlineDisplay.ColorArrayName = ['POINTS', 'colors']
-            outlineDisplay.LineWidth = 4
+            outlineDisplay.LineWidth = 2
 
     def get_map_scalars(self):
         """Returns the map scalars value through LUT or not."""
