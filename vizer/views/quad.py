@@ -144,7 +144,7 @@ class Quad(Base):
 
         # next, state we want linked between views when requested.
         # self._state['full_res'] = self._full_res
-        self._state['show_inner_slices'] = False if self._force_outer_slices else True
+        self._state['show_inner_slices'] = False
         self._state['full_res'] = False if self.opts.subsampling_factor > 1 else True
         self._state['max_row'] = 0
         self._state['max_col'] = 0
