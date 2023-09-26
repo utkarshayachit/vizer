@@ -260,19 +260,16 @@ class Quad(Base):
             self._copy_slice_camera(view)
             self._link_interaction()
 
-        def fix_parallel_scale_callback(*args, **kwargs):
+        def update_scale_legend_callback(*args, **kwargs):
             """callback to fix the parallel scale on each render."""
             height = view.ViewSize[1] * self._active_subsampling_factor
             half_height = height / 2
-            # ensures that the scale to a value to cause the
-            # image to appear pixelated
-            view.CameraParallelScale = max(half_height, view.GetActiveCamera().GetParallelScale())
-
             scale = self._active_subsampling_factor * view.CameraParallelScale / half_height
             legend.update_scale(scale)
 
         view.GetInteractor().AddObserver('InteractionEvent', interaction_callback)
-        view.SMProxy.AddObserver('StartEvent', fix_parallel_scale_callback)
+        # before every render, call update_scale_legend to ensure the scale is correct
+        view.SMProxy.AddObserver('StartEvent', update_scale_legend_callback)
         return view
 
     def create_3d_view(self):
