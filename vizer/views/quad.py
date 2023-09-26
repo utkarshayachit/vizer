@@ -61,44 +61,19 @@ class UIBuilder:
             click_callback = lambda _: callback()
         else:
             click_callback = lambda value: self.toggle_callback(view, var, value)
-
-        with vuetify.VTooltip(left=True, v_if=f'{view.id}_{var}'):
-            with vuetify.Template(v_slot_activator="{on, attrs}"):
-                vuetify.VIcon(on_icon,
-                    click=lambda **_: click_callback(False),
-                    classes="mr-4",
-                    v_bind="attrs",
-                    v_on="on",
-                    __properties=[("v_bind", "v-bind"), ("v_on", "v-on")])
+        with vuetify.VBtn(v_if=f'{view.id}_{var}', tile=True, small=True, click=lambda **_: click_callback(False)):
+            vuetify.VIcon(on_icon, v_if=f'{view.id}_{var}', left=True)
             html.Pre(on_text)
-        with vuetify.VTooltip(left=True, v_if=f'!{view.id}_{var}'):
-            with vuetify.Template(v_slot_activator="{on, attrs}"):
-                vuetify.VIcon(off_icon,
-                    click=lambda **_: click_callback(True),
-                    classes="mr-4",
-                    v_bind="attrs",
-                    v_on="on",
-                    __properties=[("v_bind", "v-bind"), ("v_on", "v-on")])
+        with vuetify.VBtn(v_if=f'!{view.id}_{var}', tile=True, small=True, click=lambda **_: click_callback(True)):
+            vuetify.VIcon(off_icon, v_if=f'!{view.id}_{var}', left=True)
             html.Pre(off_text)
 
     def maximize_button(self, view, i, j):
-        with vuetify.VTooltip(left=True, v_if=f'{view.id}_no_maximized'):
-            with vuetify.Template(v_slot_activator="{on, attrs}"):
-                vuetify.VIcon("mdi-border-all",
-                    click=lambda **_: view.toggle_maximize(i, j),
-                    classes="mr-4",
-                    v_bind="attrs",
-                    v_on="on",
-                    __properties=[("v_bind", "v-bind"), ("v_on", "v-on")])
+        with vuetify.VBtn(tile=True, small=True, v_if=f'{view.id}_no_maximized', click=lambda **_: view.toggle_maximize(i, j)):
+            vuetify.VIcon("mdi-border-all", left=True)
             html.Pre("Maximize")
-        with vuetify.VTooltip(left=True, v_if=f'!{view.id}_no_maximized'):
-            with vuetify.Template(v_slot_activator="{on, attrs}"):
-                vuetify.VIcon("mdi-window-maximize",
-                    click=lambda **_: view.toggle_maximize(i, j),
-                    classes="mr-4",
-                    v_bind="attrs",
-                    v_on="on",
-                    __properties=[("v_bind", "v-bind"), ("v_on", "v-on")])
+        with vuetify.VBtn(tile=True, small=True, v_if=f'!{view.id}_no_maximized', click=lambda **_: view.toggle_maximize(i, j)):
+            vuetify.VIcon("mdi-window-maximize", left=True)
             html.Pre("Restore")
 
     def select_button(self, view, axis):
@@ -373,15 +348,9 @@ class Quad(Base):
                         off_text='Show full resolution', on_text='Show low resolution',
                         click=self.toggle_full_res)
             with vuetify.VCol(cols='auto'):
-                with vuetify.VTooltip(left=True):
-                    with vuetify.Template(v_slot_activator="{on, attrs}"):
-                        vuetify.VIcon("mdi-fit-to-screen",
-                        click=self.reset_cameras,
-                        classes="mr-4",
-                        v_bind="attrs",
-                        v_on="on",
-                        __properties=[("v_bind", "v-bind"), ("v_on", "v-on")])
-                    html.Pre("Reset zoom for all views")
+                with vuetify.VBtn(click=self.reset_cameras, small=True, tile=True):
+                    vuetify.VIcon("mdi-fit-to-screen", left=True)
+                    html.Pre("Reset Views")
 
         # setup popup dialog for selecting regions
         if self._segmentation_view is not None:
