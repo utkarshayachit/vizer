@@ -16,7 +16,8 @@ log = utils.get_logger(__name__)
 
 class CONSTANTS:
     Colors = [ [1., 0., 0.], [1., 1., 0.],  [0., 1., 0.] ]
-    AxisNames = ['x', 'y', 'z']
+    # AxisNames = ['x', 'y', 'z']
+    AxisNames = ['D1', 'D2', 'D3']
     OutlinePropertyNames = ['XSlices', 'YSlices', 'ZSlices']
 
 from vtkmodules.vtkRenderingCore import vtkTextActor
