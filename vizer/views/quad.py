@@ -70,10 +70,10 @@ class UIBuilder:
 
     def maximize_button(self, view, i, j):
         with vuetify.VBtn(tile=True, small=True, v_if=f'{view.id}_no_maximized', click=lambda **_: view.toggle_maximize(i, j)):
-            vuetify.VIcon("mdi-border-all", left=True)
+            vuetify.VIcon("mdi-window-maximize", left=True)
             html.Pre("Maximize")
         with vuetify.VBtn(tile=True, small=True, v_if=f'!{view.id}_no_maximized', click=lambda **_: view.toggle_maximize(i, j)):
-            vuetify.VIcon("mdi-window-maximize", left=True)
+            vuetify.VIcon("mdi-border-all", left=True)
             html.Pre("Restore")
 
     def select_button(self, view, axis):
@@ -340,11 +340,11 @@ class Quad(Base):
         with self.layout.button_bar:
             if not self._force_outer_slices:
                 with vuetify.VCol(cols='auto'):
-                    self._ui_builder.toggle_button(self, var='show_inner_slices', off_icon='mdi-border-outside', on_icon='mdi-border-inside',
+                    self._ui_builder.toggle_button(self, var='show_inner_slices', on_icon='mdi-border-outside', off_icon='mdi-border-inside',
                       on_text='Show outer faces', off_text='Show inner slices')
             if self.opts.subsampling_factor > 1:
                 with vuetify.VCol(cols='auto'):
-                    self._ui_builder.toggle_button(self, var='full_res', on_icon='mdi-quality-high', off_icon='mdi-quality-low',
+                    self._ui_builder.toggle_button(self, var='full_res', off_icon='mdi-quality-high', on_icon='mdi-quality-low',
                         off_text='Show full resolution', on_text='Show low resolution',
                         click=self.toggle_full_res)
             with vuetify.VCol(cols='auto'):
