@@ -145,7 +145,7 @@ class Quad(Base):
         # next, state we want linked between views when requested.
         # self._state['full_res'] = self._full_res
         self._state['show_inner_slices'] = False if self._force_outer_slices else True
-        self._state['full_res'] = False
+        self._state['full_res'] = False if self.opts.subsampling_factor > 1 else True
         self._state['max_row'] = 0
         self._state['max_col'] = 0
         self._state['no_maximized'] = True
@@ -188,7 +188,8 @@ class Quad(Base):
     def annotations_txt(self):
         """returns the annotations for this view."""
         annotations = list(self.meta.raw_config.annotations if self.meta.raw_config is not None else [])
-        annotations.append(f'subsampling: {self._active_subsampling_factor}X')
+        if self.opts.subsampling_factor > 1:
+            annotations.append(f'subsampling: {self._active_subsampling_factor}X')
         return '\n'.join(annotations)
 
     @staticmethod
@@ -366,10 +367,11 @@ class Quad(Base):
                 with vuetify.VCol(cols='auto'):
                     self._ui_builder.toggle_button(self, var='show_inner_slices', off_icon='mdi-border-outside', on_icon='mdi-border-inside',
                       on_text='Show outer faces', off_text='Show inner slices')
-            with vuetify.VCol(cols='auto'):
-                self._ui_builder.toggle_button(self, var='full_res', on_icon='mdi-quality-high', off_icon='mdi-quality-low',
-                    off_text='Show full resolution', on_text='Show low resolution',
-                    click=self.toggle_full_res)
+            if self.opts.subsampling_factor > 1:
+                with vuetify.VCol(cols='auto'):
+                    self._ui_builder.toggle_button(self, var='full_res', on_icon='mdi-quality-high', off_icon='mdi-quality-low',
+                        off_text='Show full resolution', on_text='Show low resolution',
+                        click=self.toggle_full_res)
             with vuetify.VCol(cols='auto'):
                 with vuetify.VTooltip(left=True):
                     with vuetify.Template(v_slot_activator="{on, attrs}"):
@@ -512,6 +514,7 @@ class Quad(Base):
         """Creates the 3D pipeline."""
         log.info(f'{self.id}: creating 3d pipeline')
         view = self._views[3]
+        view.OrientationAxesVisibility = 0
         outline_display = simple.Show(self.producer, view)
         simple.ColorBy(outline_display, ('POINTS', self.get_scalar_name()))
         outline_display.SetRepresentationType('Outline')

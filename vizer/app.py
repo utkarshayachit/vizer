@@ -36,7 +36,7 @@ def exec():
     server.cli.add_argument('--use-vtk-reader',
             help='use standard VTK reader (default: False)', default=False, action='store_true')
     server.cli.add_argument('--subsampling-factor',
-            help='specify image sub-sampling factor', default=4, type=int)
+            help='specify image sub-sampling factor', default=1, type=int)
     server.cli.add_argument('--force-view', help="force view type (primarily for debugging)", default=None,
         choices=views.get_view_types())
     server.cli.add_argument('--link-views', help='link interaction between views of same time (default: True)', default=False, action='store_true')
