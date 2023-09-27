@@ -7,6 +7,7 @@ from vizer.readers import RawConfig
 import os.path
 import re
 import numpy
+import weakref
 
 from paraview import simple, vtk
 from trame.widgets import vuetify, paraview, html
@@ -198,23 +199,26 @@ class Quad(Base):
         await self.load_dataset(async_only=True)
         self._block_update = False
 
-    def _copy_slice_camera(self, view):
+    def _copy_slice_camera(self, axis: int):
         """Links the interaction of the given axis to the other views."""
+        view = self._views[axis]
         fp = view.CameraFocalPoint
         for i in range(3):
-            target_view = self._views[i]
-            if target_view == view:
+            if i == axis:
                 continue
-
-            target_view.CameraParallelScale = view.CameraParallelScale
-
+            target_view = self._views[i]
             pos = [0, 0, 0]
             for cc in range(3):
                 pos[cc] = fp[cc] + target_view.CameraPosition[cc] - target_view.CameraFocalPoint[cc]
 
-            target_view.CameraFocalPoint = fp
-            target_view.CameraPosition = pos
-            self._html_views[i].update()
+            if target_view.CameraParallelScale != view.CameraParallelScale or \
+                target_view.CameraFocalPoint != fp or \
+                target_view.CameraPosition != pos:
+                target_view.CameraParallelScale = view.CameraParallelScale
+                target_view.CameraFocalPoint = fp
+                target_view.CameraPosition = pos
+                target_view.StillRender()
+                self._html_views[i].update()
 
     def toggle_maximize(self, i, j):
         if self._state['no_maximized']:
@@ -255,10 +259,14 @@ class Quad(Base):
         legend = ScaleActor(self.meta.raw_config)
         renderer.AddActor(legend)
 
+        self._propagate_camera_on_render = False
+        meWRef = weakref.ref(self)
+
         def interaction_callback(*args, **kwargs):
             """Callback for interaction events."""
-            self._copy_slice_camera(view)
-            self._link_interaction()
+            me = meWRef()
+            if me is not None:
+                me._propagate_camera_on_render = True
 
         def update_scale_legend_callback(*args, **kwargs):
             """callback to fix the parallel scale on each render."""
@@ -267,9 +275,20 @@ class Quad(Base):
             scale = self._active_subsampling_factor * view.CameraParallelScale / half_height
             legend.update_scale(scale)
 
+        def propagate_render_callback(*args, **kwargs):
+            me = meWRef()
+            if me is not None and me._propagate_camera_on_render:
+                me._propagate_camera_on_render = False
+                # log.info('propagating camera')
+                self._copy_slice_camera(axis)
+                self._link_interaction()
+
         view.GetInteractor().AddObserver('InteractionEvent', interaction_callback)
+        view.GetInteractor().AddObserver('MouseWheelForwardEvent', interaction_callback)
+        view.GetInteractor().AddObserver('MouseWheelBackwardEvent', interaction_callback)
         # before every render, call update_scale_legend to ensure the scale is correct
         view.SMProxy.AddObserver('StartEvent', update_scale_legend_callback)
+        view.SMProxy.AddObserver('EndEvent', propagate_render_callback)
         return view
 
     def create_3d_view(self):
