@@ -616,7 +616,11 @@ class Segmentation(Base):
             self._display.MapScalars = 0
         else:
             drange = self.producer.GetDataInformation().GetArrayInformation(self.get_scalar_name(), vtk.vtkDataObject.FIELD_ASSOCIATION_POINTS).GetComponentRange(0)
-            log.info(f'{self.id}: range: {drange}')
+            if drange[0] != drange[1]:
+                ds = dsa.WrapDataObject(self.dataset)
+                array = ds.PointData[self.get_scalar_name()]
+                drange = [numpy.percentile(array, 5), numpy.percentile(array, 95)]
+            log.info('5/95 percentile: %f/%f', drange[0], drange[1])
             self._lut.InterpretValuesAsCategories = False
             self._lut.ApplyPreset('Grayscale', True)
             self._lut.RGBPoints = [0, 0.2, 0.2, 0.2, 1, 1, 1, 1]

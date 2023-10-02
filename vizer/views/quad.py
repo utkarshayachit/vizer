@@ -10,6 +10,7 @@ import numpy
 import weakref
 
 from paraview import simple, vtk
+from vtkmodules.numpy_interface import dataset_adapter as dsa
 from trame.widgets import vuetify, paraview, html
 from trame.app import get_server, asynchronous
 
@@ -597,7 +598,11 @@ class Quad(Base):
             assert self.get_map_scalars() == False
         else:
             drange = self.producer.GetDataInformation().GetArrayInformation(self.get_scalar_name(), vtk.vtkDataObject.FIELD_ASSOCIATION_POINTS).GetComponentRange(0)
-            log.info(f'{self.id}: range: {drange}')
+            if drange[0] != drange[1]:
+                ds = dsa.WrapDataObject(self.dataset)
+                array = ds.PointData[self.get_scalar_name()]
+                drange = [numpy.percentile(array, 5), numpy.percentile(array, 95)]
+            log.info('5/95 percentile: %f/%f', drange[0], drange[1])
             self._lut.InterpretValuesAsCategories = False
             self._lut.ApplyPreset('Grayscale', True)
             self._lut.RGBPoints = [0, 0.2, 0.2, 0.2, 1, 1, 1, 1]
