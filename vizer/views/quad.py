@@ -607,7 +607,7 @@ class Quad(Base):
             self._lut.ApplyPreset('Grayscale', True)
             self._lut.RGBPoints = [0, 0.2, 0.2, 0.2, 1, 1, 1, 1]
             self._lut.RescaleTransferFunction(drange[0], drange[1])
-            sb.Visibility = True
+            sb.Visibility = False if self.opts.legend_visibility == 'never' else True
             sb.Title = ''
             self._color_mapyer.Colors = []
             self._color_mapyer.Scalars = []
