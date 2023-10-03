@@ -7,8 +7,10 @@ from vizer.readers import RawConfig
 import os.path
 import re
 import numpy
+import weakref
 
 from paraview import simple, vtk
+from vtkmodules.numpy_interface import dataset_adapter as dsa
 from trame.widgets import vuetify, paraview, html
 from trame.app import get_server, asynchronous
 
@@ -16,7 +18,8 @@ log = utils.get_logger(__name__)
 
 class CONSTANTS:
     Colors = [ [1., 0., 0.], [1., 1., 0.],  [0., 1., 0.] ]
-    AxisNames = ['x', 'y', 'z']
+    # AxisNames = ['x', 'y', 'z']
+    AxisNames = ['D1', 'D2', 'D3']
     OutlinePropertyNames = ['XSlices', 'YSlices', 'ZSlices']
 
 from vtkmodules.vtkRenderingCore import vtkTextActor
@@ -60,44 +63,19 @@ class UIBuilder:
             click_callback = lambda _: callback()
         else:
             click_callback = lambda value: self.toggle_callback(view, var, value)
-
-        with vuetify.VTooltip(left=True, v_if=f'{view.id}_{var}'):
-            with vuetify.Template(v_slot_activator="{on, attrs}"):
-                vuetify.VIcon(on_icon,
-                    click=lambda **_: click_callback(False),
-                    classes="mr-4",
-                    v_bind="attrs",
-                    v_on="on",
-                    __properties=[("v_bind", "v-bind"), ("v_on", "v-on")])
+        with vuetify.VBtn(v_if=f'{view.id}_{var}', tile=True, small=True, click=lambda **_: click_callback(False)):
+            vuetify.VIcon(on_icon, v_if=f'{view.id}_{var}', left=True)
             html.Pre(on_text)
-        with vuetify.VTooltip(left=True, v_if=f'!{view.id}_{var}'):
-            with vuetify.Template(v_slot_activator="{on, attrs}"):
-                vuetify.VIcon(off_icon,
-                    click=lambda **_: click_callback(True),
-                    classes="mr-4",
-                    v_bind="attrs",
-                    v_on="on",
-                    __properties=[("v_bind", "v-bind"), ("v_on", "v-on")])
+        with vuetify.VBtn(v_if=f'!{view.id}_{var}', tile=True, small=True, click=lambda **_: click_callback(True)):
+            vuetify.VIcon(off_icon, v_if=f'!{view.id}_{var}', left=True)
             html.Pre(off_text)
 
     def maximize_button(self, view, i, j):
-        with vuetify.VTooltip(left=True, v_if=f'{view.id}_no_maximized'):
-            with vuetify.Template(v_slot_activator="{on, attrs}"):
-                vuetify.VIcon("mdi-border-all",
-                    click=lambda **_: view.toggle_maximize(i, j),
-                    classes="mr-4",
-                    v_bind="attrs",
-                    v_on="on",
-                    __properties=[("v_bind", "v-bind"), ("v_on", "v-on")])
+        with vuetify.VBtn(tile=True, small=True, v_if=f'{view.id}_no_maximized', click=lambda **_: view.toggle_maximize(i, j)):
+            vuetify.VIcon("mdi-window-maximize", left=True)
             html.Pre("Maximize")
-        with vuetify.VTooltip(left=True, v_if=f'!{view.id}_no_maximized'):
-            with vuetify.Template(v_slot_activator="{on, attrs}"):
-                vuetify.VIcon("mdi-window-maximize",
-                    click=lambda **_: view.toggle_maximize(i, j),
-                    classes="mr-4",
-                    v_bind="attrs",
-                    v_on="on",
-                    __properties=[("v_bind", "v-bind"), ("v_on", "v-on")])
+        with vuetify.VBtn(tile=True, small=True, v_if=f'!{view.id}_no_maximized', click=lambda **_: view.toggle_maximize(i, j)):
+            vuetify.VIcon("mdi-border-all", left=True)
             html.Pre("Restore")
 
     def select_button(self, view, axis):
@@ -143,8 +121,8 @@ class Quad(Base):
 
         # next, state we want linked between views when requested.
         # self._state['full_res'] = self._full_res
-        self._state['show_inner_slices'] = False if self._force_outer_slices else True
-        self._state['full_res'] = False
+        self._state['show_inner_slices'] = False
+        self._state['full_res'] = False if self.opts.subsampling_factor > 1 else True
         self._state['max_row'] = 0
         self._state['max_col'] = 0
         self._state['no_maximized'] = True
@@ -187,7 +165,8 @@ class Quad(Base):
     def annotations_txt(self):
         """returns the annotations for this view."""
         annotations = list(self.meta.raw_config.annotations if self.meta.raw_config is not None else [])
-        annotations.append(f'subsampling: {self._active_subsampling_factor}X')
+        if self.opts.subsampling_factor > 1:
+            annotations.append(f'subsampling: {self._active_subsampling_factor}X')
         return '\n'.join(annotations)
 
     @staticmethod
@@ -221,23 +200,26 @@ class Quad(Base):
         await self.load_dataset(async_only=True)
         self._block_update = False
 
-    def _copy_slice_camera(self, view):
+    def _copy_slice_camera(self, axis: int):
         """Links the interaction of the given axis to the other views."""
+        view = self._views[axis]
         fp = view.CameraFocalPoint
         for i in range(3):
-            target_view = self._views[i]
-            if target_view == view:
+            if i == axis:
                 continue
-
-            target_view.CameraParallelScale = view.CameraParallelScale
-
+            target_view = self._views[i]
             pos = [0, 0, 0]
             for cc in range(3):
                 pos[cc] = fp[cc] + target_view.CameraPosition[cc] - target_view.CameraFocalPoint[cc]
 
-            target_view.CameraFocalPoint = fp
-            target_view.CameraPosition = pos
-            self._html_views[i].update()
+            if target_view.CameraParallelScale != view.CameraParallelScale or \
+                target_view.CameraFocalPoint != fp or \
+                target_view.CameraPosition != pos:
+                target_view.CameraParallelScale = view.CameraParallelScale
+                target_view.CameraFocalPoint = fp
+                target_view.CameraPosition = pos
+                target_view.StillRender()
+                self._html_views[i].update()
 
     def toggle_maximize(self, i, j):
         if self._state['no_maximized']:
@@ -278,24 +260,36 @@ class Quad(Base):
         legend = ScaleActor(self.meta.raw_config)
         renderer.AddActor(legend)
 
+        self._propagate_camera_on_render = False
+        meWRef = weakref.ref(self)
+
         def interaction_callback(*args, **kwargs):
             """Callback for interaction events."""
-            self._copy_slice_camera(view)
-            self._link_interaction()
+            me = meWRef()
+            if me is not None:
+                me._propagate_camera_on_render = True
 
-        def fix_parallel_scale_callback(*args, **kwargs):
+        def update_scale_legend_callback(*args, **kwargs):
             """callback to fix the parallel scale on each render."""
             height = view.ViewSize[1] * self._active_subsampling_factor
             half_height = height / 2
-            # ensures that the scale to a value to cause the
-            # image to appear pixelated
-            view.CameraParallelScale = max(half_height, view.GetActiveCamera().GetParallelScale())
-
             scale = self._active_subsampling_factor * view.CameraParallelScale / half_height
             legend.update_scale(scale)
 
+        def propagate_render_callback(*args, **kwargs):
+            me = meWRef()
+            if me is not None and me._propagate_camera_on_render:
+                me._propagate_camera_on_render = False
+                # log.info('propagating camera')
+                self._copy_slice_camera(axis)
+                self._link_interaction()
+
         view.GetInteractor().AddObserver('InteractionEvent', interaction_callback)
-        view.SMProxy.AddObserver('StartEvent', fix_parallel_scale_callback)
+        view.GetInteractor().AddObserver('MouseWheelForwardEvent', interaction_callback)
+        view.GetInteractor().AddObserver('MouseWheelBackwardEvent', interaction_callback)
+        # before every render, call update_scale_legend to ensure the scale is correct
+        view.SMProxy.AddObserver('StartEvent', update_scale_legend_callback)
+        view.SMProxy.AddObserver('EndEvent', propagate_render_callback)
         return view
 
     def create_3d_view(self):
@@ -363,22 +357,17 @@ class Quad(Base):
         with self.layout.button_bar:
             if not self._force_outer_slices:
                 with vuetify.VCol(cols='auto'):
-                    self._ui_builder.toggle_button(self, var='show_inner_slices', off_icon='mdi-border-outside', on_icon='mdi-border-inside',
+                    self._ui_builder.toggle_button(self, var='show_inner_slices', on_icon='mdi-border-outside', off_icon='mdi-border-inside',
                       on_text='Show outer faces', off_text='Show inner slices')
+            if self.opts.subsampling_factor > 1:
+                with vuetify.VCol(cols='auto'):
+                    self._ui_builder.toggle_button(self, var='full_res', off_icon='mdi-quality-high', on_icon='mdi-quality-low',
+                        off_text='Show full resolution', on_text='Show low resolution',
+                        click=self.toggle_full_res)
             with vuetify.VCol(cols='auto'):
-                self._ui_builder.toggle_button(self, var='full_res', on_icon='mdi-quality-high', off_icon='mdi-quality-low',
-                    off_text='Show full resolution', on_text='Show low resolution',
-                    click=self.toggle_full_res)
-            with vuetify.VCol(cols='auto'):
-                with vuetify.VTooltip(left=True):
-                    with vuetify.Template(v_slot_activator="{on, attrs}"):
-                        vuetify.VIcon("mdi-fit-to-screen",
-                        click=self.reset_cameras,
-                        classes="mr-4",
-                        v_bind="attrs",
-                        v_on="on",
-                        __properties=[("v_bind", "v-bind"), ("v_on", "v-on")])
-                    html.Pre("Reset zoom for all views")
+                with vuetify.VBtn(click=self.reset_cameras, small=True, tile=True):
+                    vuetify.VIcon("mdi-fit-to-screen", left=True)
+                    html.Pre("Reset Views")
 
         # setup popup dialog for selecting regions
         if self._segmentation_view is not None:
@@ -511,6 +500,7 @@ class Quad(Base):
         """Creates the 3D pipeline."""
         log.info(f'{self.id}: creating 3d pipeline')
         view = self._views[3]
+        view.OrientationAxesVisibility = 0
         outline_display = simple.Show(self.producer, view)
         simple.ColorBy(outline_display, ('POINTS', self.get_scalar_name()))
         outline_display.SetRepresentationType('Outline')
@@ -581,7 +571,7 @@ class Quad(Base):
             outlineDisplay.SetRepresentationType('Wireframe')
             outlineDisplay.MapScalars = 0 # directly interpret scalars as colors
             outlineDisplay.ColorArrayName = ['POINTS', 'colors']
-            outlineDisplay.LineWidth = 4
+            outlineDisplay.LineWidth = 2
 
     def get_map_scalars(self):
         """Returns the map scalars value through LUT or not."""
@@ -608,12 +598,16 @@ class Quad(Base):
             assert self.get_map_scalars() == False
         else:
             drange = self.producer.GetDataInformation().GetArrayInformation(self.get_scalar_name(), vtk.vtkDataObject.FIELD_ASSOCIATION_POINTS).GetComponentRange(0)
-            log.info(f'{self.id}: range: {drange}')
+            if drange[0] != drange[1]:
+                ds = dsa.WrapDataObject(self.dataset)
+                array = ds.PointData[self.get_scalar_name()]
+                drange = [numpy.percentile(array, 5), numpy.percentile(array, 95)]
+            log.info('5/95 percentile: %f/%f', drange[0], drange[1])
             self._lut.InterpretValuesAsCategories = False
             self._lut.ApplyPreset('Grayscale', True)
             self._lut.RGBPoints = [0, 0.2, 0.2, 0.2, 1, 1, 1, 1]
             self._lut.RescaleTransferFunction(drange[0], drange[1])
-            sb.Visibility = True
+            sb.Visibility = False if self.opts.legend_visibility == 'never' else True
             sb.Title = ''
             self._color_mapyer.Colors = []
             self._color_mapyer.Scalars = []

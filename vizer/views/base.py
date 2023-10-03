@@ -234,7 +234,8 @@ class Base(ABC):
 
     def reset_camera(self, view):
         """reset the camera of the view."""
-        simple.ResetCamera(view)
+        view.ResetCamera(True)
+        view.StillRender()
         view.CenterOfRotation = view.CameraFocalPoint.GetData()
 
     def set_status(self, status):
