@@ -601,7 +601,8 @@ class Quad(Base):
             if drange[0] != drange[1]:
                 ds = dsa.WrapDataObject(self.dataset)
                 array = ds.PointData[self.get_scalar_name()]
-                drange = [numpy.percentile(array, 5), numpy.percentile(array, 95)]
+                percentiles = numpy.percentile(array, [5, 95])
+                drange = [percentiles[0], percentiles[1]]
             log.info('5/95 percentile: %f/%f', drange[0], drange[1])
             self._lut.InterpretValuesAsCategories = False
             self._lut.ApplyPreset('Grayscale', True)
