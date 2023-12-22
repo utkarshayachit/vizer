@@ -284,9 +284,12 @@ def _create_vtk_image_data(raw_config: RawConfig, buffer:numpy.ndarray=None):
     dataset.SetExtent(raw_config.vtk_extent)
     dataset.SetSpacing(raw_config.vtk_spacing)
     if buffer is None:
+        # dataset.SetExtent(0,1,0,1,0,1)
+        dataset.SetExtent(raw_config.vtk_extent)
         dataset.AllocateScalars(raw_config.vtk_scalar_type, 1)
         dataset.GetPointData().GetScalars().SetName('ImageFile')
         dataset.GetPointData().GetScalars().Fill(0)
+        dataset.SetExtent(raw_config.vtk_extent)
     else:
         nds = dsa.WrapDataObject(dataset)
         nds.PointData.append(buffer, 'ImageFile')
@@ -314,6 +317,9 @@ def sync_read(meta, args):
         dataset = producer.GetClientSideObject().GetOutputDataObject(0)
         return (dataset, False)
 
+def _compute_percentile(buffer, percentiles):
+    return numpy.percentile(buffer, percentiles)
+
 async def async_read(meta, args):
     """reads data asynchronously"""
     if not meta.is_raw() or args.use_vtk_reader:
@@ -326,4 +332,7 @@ async def async_read(meta, args):
     # we don't want to block the main thread, so we use a separate thread for
     # the actual reading
     buffer = await asyncio.to_thread(raw_reader.read, meta.filename, meta.raw_config, num_chunks)
-    return _create_vtk_image_data(meta.raw_config, buffer)
+    percentiles = await asyncio.to_thread(_compute_percentile, buffer, [5, 95])
+    log.info(f'percentiles: {percentiles}')
+    image = _create_vtk_image_data(meta.raw_config, buffer)
+    return image

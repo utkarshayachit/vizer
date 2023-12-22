@@ -598,7 +598,7 @@ class Quad(Base):
             assert self.get_map_scalars() == False
         else:
             drange = self.producer.GetDataInformation().GetArrayInformation(self.get_scalar_name(), vtk.vtkDataObject.FIELD_ASSOCIATION_POINTS).GetComponentRange(0)
-            if drange[0] != drange[1]:
+            if drange[0] != drange[1] and False:
                 ds = dsa.WrapDataObject(self.dataset)
                 array = ds.PointData[self.get_scalar_name()]
                 percentiles = numpy.percentile(array, [5, 95])
